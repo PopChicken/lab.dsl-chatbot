@@ -113,6 +113,7 @@ class BotModel:
                 self.__stat_table.append({
                     'type': BotModel.StatType.Root,
                     'node': len(self.__node_list) - 1,
+                    'wait': {},
                     'serv': {}
                 })
             else:

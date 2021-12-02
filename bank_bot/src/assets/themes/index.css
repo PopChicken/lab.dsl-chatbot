@@ -1,0 +1,19 @@
+.el-button--primary {
+  --el-button-background-color: #c04851;
+  --el-button-active-background-color: #ed5a65;
+  --el-button-hover-color: #f07c82;
+  --el-button-border-color: #c04851;
+  --el-button-active-border-color: #c04851;
+}
+
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:active,
+.el-button--primary.is-disabled:focus,
+.el-button--primary.is-disabled:hover {
+  background-color: #e3b4b8;
+  border-color: #eea2a4;
+}
+
+.el-input {
+  --el-input-focus-border: #eea2a4;
+}

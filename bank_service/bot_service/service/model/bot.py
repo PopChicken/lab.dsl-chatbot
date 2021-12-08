@@ -1,8 +1,22 @@
+"""the service model of bot
+
+To use this model, there must be a parsed script. Developer
+
+
+Typical usage example:
+from parser import load_script
+
+
+script = load_script(f)
+bot = bot_module.BotModel()
+bot.build_model(script)
+"""
 import importlib
 import inspect
-import threading
 
 from enum import Enum, auto
+
+from bot_service.service.model.exception import ConflictException
 
 
 PREVIOUS_SECTION = "返回"
@@ -11,6 +25,8 @@ UNKNOWN_MSG = "祈蒙见恕！小二没理解少侠的意思..."
 
 
 class CommandEnum(Enum):
+    """the enumerate class to describe the type of command
+    """
     Root = auto()
     Service = auto()
     Text = auto()
@@ -22,12 +38,27 @@ class CommandEnum(Enum):
 
 
 class BotNode:  # one service, one node
+    """the node data structure to store information
+    """
     def __init__(self) -> None:
+        """init
+        
+        It will define its private variables
+        """
         self.__query = {}
         self.__faq_keyword = None
         self.__faq: dict[str, str] = {}
 
     def set_query(self, type: CommandEnum, q: str, *args) -> None:
+        """set query command for text and script
+
+        Args:
+            type (CommandEnum): type of the script
+            q (str): text for query to response
+
+        Raises:
+            ConflictException: text to be registered is already existed
+        """
         if type not in {
             CommandEnum.Text,
             CommandEnum.Script,
@@ -35,7 +66,7 @@ class BotNode:  # one service, one node
         }:
             raise Exception("illegal type of query.")
         if q in self.__query:
-            raise Exception("keyword '%s' has conflict." % q)
+            raise ConflictException("keyword '%s' has conflict." % q)
         elif type == CommandEnum.ScriptWaiting:
             module = importlib.import_module('.' + args[1], 'bot_service.service.model.module')
             if not inspect.isfunction(module.handle):
@@ -50,17 +81,45 @@ class BotNode:  # one service, one node
             self.__query[q] = (type, args[0])
 
     def set_faq_keyword(self, s: str) -> None:
+        """set the keyword to print the entire faq
+
+        Args:
+            s (str): the keyword
+
+        Raises:
+            ConflictException: faq keyword is already existed
+        """
         if self.__faq_keyword is not None:
-            raise Exception('faq keyword existed.')
+            raise ConflictException('faq keyword existed.')
         self.__faq_keyword = s
 
     def set_faq(self, q: str, a: str) -> None:
+        """add an item to faq list
+
+        Args:
+            q (str): question
+            a (str): answer
+        """
         self.__faq[q] = a
     
     def get_query(self, q: str) -> None | tuple:
+        """try to get an anwser from the query list
+
+        Args:
+            q (str): keyword
+
+        Returns:
+            tuple: (type, info ...) of the option
+            None: not found
+        """
         return self.__query.get(q)
     
     def get_all_faq(self) -> str:
+        """get the merged entire faq as a string
+
+        Returns:
+            str: the faq string
+        """
         faq = ""
         cnt = 0
         for k, v in self.__faq.items():
@@ -71,6 +130,11 @@ class BotNode:  # one service, one node
         return faq
     
     def get_all_query_keys(self) -> list[tuple[CommandEnum, str]]:
+        """get keyword list of the query list
+
+        Returns:
+            list[tuple[CommandEnum, str]]: the query keyword list
+        """
         keys = []
         items = self.__query.items()
         for k, v in items:
@@ -78,9 +142,24 @@ class BotNode:  # one service, one node
         return keys
 
     def get_faq_keyword(self) -> str | None:
+        """get previously defined keyword of faq
+
+        Returns:
+            str: the keyword
+            None: no keyword set previously
+        """
         return self.__faq_keyword
 
     def search_faq(self, q: str) -> str | None:
+        """search a question in faq list
+
+        Args:
+            q (str): question
+
+        Returns:
+            str: merged string of result items
+            None: no result found
+        """
         faq = ""
         cnt = 0
         for k, v in self.__faq.items():
@@ -96,17 +175,38 @@ class BotNode:  # one service, one node
 
 
 class BotModel:
+    """core model of bot system
+
+    It will create a automator from user defined script. The script passed
+    here should be parsed and well verified.
+    """
     
     class StatType(Enum):
+        """the enumerate class to describe the stat in automator
+        """
         Root = 0
         Serv = 1
         Wait = 2
     def __init__(self) -> None:
+        """init
+        
+        It will define its private variables
+        """
         self.__stat_table: list[dict] = []
         self.__node_list: list[BotNode] = []
 
     def build_model(self, script: list) -> None:
+        """to parse the script and generate an automator of the bot
+
+        Args:
+            script (list): the parsed script
+        """
         def recursive_build(command: tuple[tuple, list | None]):
+            """the function to generate the transition table of the automator
+
+            Args:
+                command (tuple[tuple, list): the root command of a low level code block
+            """
             node = BotNode()
             self.__node_list.append(node)
             if command[0][0] == CommandEnum.Root:
@@ -160,7 +260,25 @@ class BotModel:
         recursive_build(((CommandEnum.Root, ), script))
 
     def handle_message(self, stat: int, msg: str=None) -> tuple[int, list[str]]:
+        """handling an user message to generate the response and next stat
+
+        Args:
+            stat (int): the user's stat now
+            msg (str, optional): user's message. Defaults to None (means root).
+
+        Returns:
+            tuple[int, list[str]]: (next_stat, [reply1, reply2, ...])
+        """
         def enter_node(stat: int, node: BotNode) -> str:
+            """generate the welcome message of entering a service or the root
+
+            Args:
+                stat (int): the user's stat now
+                node (BotNode): the node (service or root) to enter
+
+            Returns:
+                str: welcome message
+            """
             reply = "以下是本庄可以提供的选项~\n"
             service = list(self.__stat_table[stat]['serv'].keys())
             question = []
@@ -174,7 +292,6 @@ class BotModel:
                 reply += '\n'.join(["服务选项："] + question) + '\n'
             reply += "如果有其它问题也可以直接和我讲~"
             return reply
-
 
         if msg is None and stat == 0:  # root
             return (stat, [enter_node(stat, self.__node_list[0]) + f"\n在子服务输入{PREVIOUS_SECTION}可以返回上一级~"])

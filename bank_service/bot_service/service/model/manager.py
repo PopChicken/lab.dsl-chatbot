@@ -1,3 +1,5 @@
+"""load script to build a bot easily
+"""
 from . import bot as bot_module
 
 from .parser import load_script

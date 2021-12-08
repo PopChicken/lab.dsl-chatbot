@@ -1,3 +1,18 @@
+"""this module provides the implementations of session api
+
+Separeted service module. It will handling the verified user
+requests passed from controllers. The verified request is a 
+legal dict object, which means the function inside this module
+do not need any verification to see if the input is illegal.
+
+Typical usage example:
+try:
+    resp = data.func(request)
+except Exception as e:
+    return JsonResponse(fail(str(e)))
+return JsonResponse(success(resp))
+
+"""
 import time
 import threading
 import uuid
@@ -21,6 +36,17 @@ from django.contrib.sessions.backends.base import SessionBase
 
 
 def init(session: SessionBase) -> list:
+    """init a session (probably re-init)
+
+    Args:
+        session (SessionBase): a user session
+
+    Raises:
+        Exception: the exception during generating welcome message
+
+    Returns:
+        list: message list
+    """
     # key = session.get('key')
     # if key is None:
     #     session['key'] = str(uuid.uuid4())
@@ -51,6 +77,18 @@ def init(session: SessionBase) -> list:
 
 
 def message(session: SessionBase, req: dict) -> list:
+    """handle a messgae request
+
+    Args:
+        session (SessionBase): an user session
+        req (dict): a verified user request
+
+    Raises:
+        Exception: the exception during generating message to reply
+
+    Returns:
+        list: message list
+    """
     msg = req['content']
     # key = session.get('key')
     # lock: threading.RLock = session_locks.get(key)

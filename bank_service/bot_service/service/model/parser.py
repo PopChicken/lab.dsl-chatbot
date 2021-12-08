@@ -1,3 +1,13 @@
+"""the module to parse a file to bot readable script
+
+a simple interpreter to parse the bot defination script,
+built based on recursive descend analysis.
+
+Typical usage:
+script = load_script(f)
+"""
+from bot_service.service.util.log import logger
+
 from typing import IO
 
 from pyparsing import Suppress, Regex, Combine, Word, nums, ParserElement, ParseResults
@@ -6,20 +16,14 @@ from pyparsing.exceptions import ParseException
 from bot_service.service.model.bot import CommandEnum
 
 
-quote = Suppress('"')
-content_no_space = Regex(r'[^\s"]+')
-content_no_space_semicolon = Regex(r'[^\s;"]+')
-content_quoted = quote + Regex(r'[^"]*') + quote
-content = content_quoted | content_no_space
-number = Combine(Word(nums) + '.' + Word(nums)) | Word(nums)
-any_no_quote = Regex(r'[^"]*')
-integer = Word(nums)
-service = Suppress('service') + content_quoted
-text = Suppress('text') + content_quoted + content_quoted
-script = Suppress('script') + content_quoted + content_quoted
-script_wating = Suppress('script') + content_quoted + content_quoted + content_quoted
-faq = Suppress('faq') + content_quoted
-faq_item = content_quoted + Suppress(':') + content_quoted
+__quote = Suppress('"')
+__content_quoted = __quote + Regex(r'[^"]*') + __quote
+__service = Suppress('service') + __content_quoted
+__text = Suppress('text') + __content_quoted + __content_quoted
+__script = Suppress('script') + __content_quoted + __content_quoted
+__script_wating = Suppress('script') + __content_quoted + __content_quoted + __content_quoted
+__faq = Suppress('faq') + __content_quoted
+__faq_item = __content_quoted + Suppress(':') + __content_quoted
 
 
 cmd_mapping = {
@@ -47,36 +51,74 @@ cmd_mapping = {
 }
 
 
-"""[summary]
-return value:
-  (CommandEnum.Service, name, [subcommands])
-"""
 def identify_command(s: str) -> tuple | None:
+    """try to indentify a command
+    
+    Args:
+        s (str): command string
+    
+    Returns:
+        tuple: (type, info ...)
+        None: not indentified
+    """
     def safe_parse(pattern: ParserElement, s: str) -> ParseResults | None:
+        """parse a command string safely with no exception interruption
+
+        Returns:
+            ParseResult: the parse result
+            None: not matched
+        """
         try:
             result = pattern.parse_string(s, parse_all=True)
         except ParseException:
             return None
         return result
 
-    if (r := safe_parse(service, s)) is not None:
+    if (r := safe_parse(__service, s)) is not None:
         return (CommandEnum.Service, r[0])
-    elif (r := safe_parse(text, s)) is not None:
+    elif (r := safe_parse(__text, s)) is not None:
         return (CommandEnum.Text, r[0], r[1])
-    elif (r := safe_parse(script_wating, s)) is not None:
+    elif (r := safe_parse(__script_wating, s)) is not None:
         return (CommandEnum.ScriptWaiting, r[0], r[1], r[2])
-    elif (r := safe_parse(script, s)) is not None:
+    elif (r := safe_parse(__script, s)) is not None:
         return (CommandEnum.Script, r[0], r[1])
-    elif (r := safe_parse(faq, s)) is not None:
+    elif (r := safe_parse(__faq, s)) is not None:
         return (CommandEnum.FAQ, r[0])
-    elif (r := safe_parse(faq_item, s)) is not None:
+    elif (r := safe_parse(__faq_item, s)) is not None:
         return (CommandEnum.FAQItem, r[0], r[1])
     else:
         return None
 
 
 def analyze(lines: list[str]) -> list:
+    """parsing the user defined script, returning well formatted script structure
+    
+    First, converting the indentation to code block with space lines
+    skipped. If there are some incorrect intendation, the analysis fails.
+    Second, synatic analysis will be performed, using the recursive 
+    descent analysis. It tries to identify all the lines to commands
+    defined in this module. If there are some lines cannot be identified
+    or appear at some incorrect code block, the analysis fails.
+    
+    Args:
+        lines (list[str]): raw user script lines
+    
+    Returns:
+        list: formatted script object (list)
+    """    
     def recursive_analyze(head_type: CommandEnum, raw_struct: list[tuple[int, str] | list]) -> list[tuple] | None:
+        """recursive descent analysis
+
+        Args:
+            head_type (CommandEnum): the father command of this block,
+            determining the allowed commands.
+            raw_struct (list[tuple[int, str] | list]): list of elements.
+            an element can be (line, string) or list (sub-block).
+
+        Returns:
+            list[tuple]: parsed commands
+            None: failed
+        """
         fail_flag = False
         script = []
         cur = 0
@@ -92,7 +134,7 @@ def analyze(lines: list[str]) -> list:
                 continue
 
             if (command := identify_command(elem[1])) is None:
-                print("syntax error at line %d." % line_cnt)
+                logger.error("syntax error at line %d." % line_cnt)
                 fail_flag = True
                 cmd_type = CommandEnum.Any
             else:
@@ -100,12 +142,12 @@ def analyze(lines: list[str]) -> list:
             
             if cmd_type not in cmd_mapping[head_type]:
                 fail_flag = True
-                print("sub-command not allowed at line %d." % line_cnt)
+                logger.error("sub-command not allowed at line %d." % line_cnt)
 
             sub_script = None
             if isinstance(next_elem, list):
                 if cmd_type == CommandEnum.Any or cmd_type not in cmd_mapping:
-                    print("no sub defination allowed under command at line %d." % line_cnt)
+                    logger.error("no sub defination allowed under command at line %d." % line_cnt)
                     fail_flag = True
 
                 sub_script = recursive_analyze(cmd_type, next_elem)
@@ -150,7 +192,7 @@ def analyze(lines: list[str]) -> list:
                 stack_peek: tuple[int, list] = stack[index]
                 if stack_peek[0] < level:
                     fail_flag = True  # bad indentation
-                    print("bad indentation at line %d." % line_cnt)
+                    logger.error("bad indentation at line %d." % line_cnt)
                     break
                 if stack_peek[0] > level:
                     continue
@@ -165,21 +207,29 @@ def analyze(lines: list[str]) -> list:
     script = recursive_analyze(CommandEnum.Root, raw_struct)
     
     if fail_flag or script is None:
-        print("analysis failed.")
+        logger.warn("analysis failed.")
         return None
     
-    print("analysis succeed.")
+    logger.info("analysis succeed.")
     return script
 
 
 def load_script(f: IO) -> list:
+    """try to parse a file stream to a bot model builder readable script
+
+    Args:
+        f (IO): fp
+
+    Returns:
+        list: parsed script, accepting by bot model builder 
+    """
     lines = f.readlines()
     script = analyze(lines)
     
     if script is None:
-        print("defination loading failed.")
+        logger.warn("defination loading failed.")
         return
 
-    print("defination loading succeeded.")
+    logger.info("defination loading succeeded.")
     return script
 

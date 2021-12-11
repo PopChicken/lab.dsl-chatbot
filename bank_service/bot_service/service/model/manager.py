@@ -8,7 +8,7 @@ from .parser import load_script
 bot = None
 __script = None
 try:
-    with open('script.def', 'r', encoding='utf8') as f:
+    with open('bot_service/definition/script.def', 'r', encoding='utf8') as f:
         __script = load_script(f)
 except:
     print('fail to load script.def.')

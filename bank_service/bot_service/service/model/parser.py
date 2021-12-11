@@ -6,7 +6,7 @@ built based on recursive descend analysis.
 Typical usage:
 script = load_script(f)
 """
-from bot_service.service.util.log import logger
+import logging
 
 from typing import IO
 
@@ -24,11 +24,18 @@ __script = Suppress('script') + __content_quoted + __content_quoted
 __script_wating = Suppress('script') + __content_quoted + __content_quoted + __content_quoted
 __faq = Suppress('faq') + __content_quoted
 __faq_item = __content_quoted + Suppress(':') + __content_quoted
+__setting = Suppress('settings')
+
+__logger = logging.getLogger()
 
 
 cmd_mapping = {
     CommandEnum.Root: {
+        CommandEnum.Setting,
         CommandEnum.Service
+    },
+    CommandEnum.Setting: {
+        CommandEnum.KVItem
     },
     CommandEnum.Service: {
         CommandEnum.Service,
@@ -38,7 +45,7 @@ cmd_mapping = {
         CommandEnum.FAQ
     },
     CommandEnum.FAQ: {
-        CommandEnum.FAQItem
+        CommandEnum.KVItem
     },
     CommandEnum.Any: {
         CommandEnum.Service,
@@ -46,7 +53,7 @@ cmd_mapping = {
         CommandEnum.Script,
         CommandEnum.ScriptWaiting,
         CommandEnum.FAQ,
-        CommandEnum.FAQItem
+        CommandEnum.KVItem
     }
 }
 
@@ -85,7 +92,9 @@ def identify_command(s: str) -> tuple | None:
     elif (r := safe_parse(__faq, s)) is not None:
         return (CommandEnum.FAQ, r[0])
     elif (r := safe_parse(__faq_item, s)) is not None:
-        return (CommandEnum.FAQItem, r[0], r[1])
+        return (CommandEnum.KVItem, r[0], r[1])
+    elif (r := safe_parse(__setting, s)) is not None:
+        return (CommandEnum.Setting, )
     else:
         return None
 
@@ -134,20 +143,22 @@ def analyze(lines: list[str]) -> list:
                 continue
 
             if (command := identify_command(elem[1])) is None:
-                logger.error("syntax error at line %d." % line_cnt)
+                __logger.error("syntax error at line %d." % elem[0])
                 fail_flag = True
                 cmd_type = CommandEnum.Any
             else:
                 cmd_type = command[0]
             
-            if cmd_type not in cmd_mapping[head_type]:
+            # if no syntas error, check sub-command
+            field = cmd_mapping.get(head_type)
+            if field is not None and cmd_type not in field:
                 fail_flag = True
-                logger.error("sub-command not allowed at line %d." % line_cnt)
+                __logger.error("sub-command not allowed at line %d." % elem[0])
 
             sub_script = None
             if isinstance(next_elem, list):
                 if cmd_type == CommandEnum.Any or cmd_type not in cmd_mapping:
-                    logger.error("no sub defination allowed under command at line %d." % line_cnt)
+                    __logger.error("no sub defination allowed under command at line %d." % (elem[0] + 1))
                     fail_flag = True
 
                 sub_script = recursive_analyze(cmd_type, next_elem)
@@ -192,7 +203,7 @@ def analyze(lines: list[str]) -> list:
                 stack_peek: tuple[int, list] = stack[index]
                 if stack_peek[0] < level:
                     fail_flag = True  # bad indentation
-                    logger.error("bad indentation at line %d." % line_cnt)
+                    __logger.error("bad indentation at line %d." % line_cnt)
                     break
                 if stack_peek[0] > level:
                     continue
@@ -207,10 +218,9 @@ def analyze(lines: list[str]) -> list:
     script = recursive_analyze(CommandEnum.Root, raw_struct)
     
     if fail_flag or script is None:
-        logger.warn("analysis failed.")
+        __logger.warn("analysis failed.")
         return None
-    
-    logger.info("analysis succeed.")
+
     return script
 
 
@@ -227,9 +237,7 @@ def load_script(f: IO) -> list:
     script = analyze(lines)
     
     if script is None:
-        logger.warn("defination loading failed.")
-        return
+        return None
 
-    logger.info("defination loading succeeded.")
     return script
 

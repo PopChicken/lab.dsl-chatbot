@@ -31,20 +31,22 @@ class PackagePathFilter(logging.Filter):
         return True
 
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+__logger = logging.getLogger()
+__logger.setLevel(logging.INFO)
 
 __logQueue = Queue()
 
-logger.addHandler(QueueHandler(__logQueue))
-logger.addFilter(PackagePathFilter())
+__logger.addHandler(QueueHandler(__logQueue))
+__logger.addFilter(PackagePathFilter())
 
-__cformatter = coloredlogs.ColoredFormatter('%(asctime)s  %(relativepath)s:%(lineno)s\t: %(levelname)s %(message)s')
+__cformatter = coloredlogs.ColoredFormatter(
+    '%(asctime)s  %(relativepath)s:%(lineno)s\t: %(levelname)s %(message)s')
 __chandler = logging.StreamHandler()
 __chandler.setFormatter(__cformatter)
 
-__formatter = logging.Formatter('%(asctime)s  %(relativepath)s:%(lineno)s\t: %(levelname)s %(message)s')
-__fhandler = logging.FileHandler("yoz.log")
+__formatter = logging.Formatter(
+    '%(asctime)s  %(relativepath)s:%(lineno)s\t: %(levelname)s %(message)s')
+__fhandler = logging.FileHandler("service.log")
 __fhandler.setFormatter(__formatter)
 
 __listener = QueueListener(__logQueue, __chandler, __fhandler)

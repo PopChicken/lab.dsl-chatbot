@@ -33,16 +33,18 @@ class CommandEnum(Enum):
     Script = auto()
     ScriptWaiting = auto()
     FAQ = auto()
-    FAQItem = auto()
+    KVItem = auto()
+    Setting = auto()
     Any = auto()
 
 
 class BotNode:  # one service, one node
     """the node data structure to store information
     """
+
     def __init__(self) -> None:
         """init
-        
+
         It will define its private variables
         """
         self.__query = {}
@@ -68,15 +70,17 @@ class BotNode:  # one service, one node
         if q in self.__query:
             raise ConflictException("keyword '%s' has conflict." % q)
         elif type == CommandEnum.ScriptWaiting:
-            module = importlib.import_module('.' + args[1], 'bot_service.service.model.module')
+            module = importlib.import_module(
+                '.' + args[1], 'bot_service.service.model.module')
             if not inspect.isfunction(module.handle):
                 raise Exception("%s.handle is not a function." % args[2])
             self.__query[q] = (type, args[0], module.handle)
         elif type == CommandEnum.Script:
-            module = importlib.import_module('.' + args[0], 'bot_service.service.model.module')
+            module = importlib.import_module(
+                '.' + args[0], 'bot_service.service.model.module')
             if not inspect.isfunction(module.handle):
                 raise Exception("%s.handle is not a function." % args[1])
-            self.__query[q] = (type, module.handle)  
+            self.__query[q] = (type, module.handle)
         else:
             self.__query[q] = (type, args[0])
 
@@ -101,7 +105,7 @@ class BotNode:  # one service, one node
             a (str): answer
         """
         self.__faq[q] = a
-    
+
     def get_query(self, q: str) -> None | tuple:
         """try to get an anwser from the query list
 
@@ -113,7 +117,7 @@ class BotNode:  # one service, one node
             None: not found
         """
         return self.__query.get(q)
-    
+
     def get_all_faq(self) -> str:
         """get the merged entire faq as a string
 
@@ -128,7 +132,7 @@ class BotNode:  # one service, one node
                 faq += '\n'
             faq += f"{cnt}. {k}\n{v}"
         return faq
-    
+
     def get_all_query_keys(self) -> list[tuple[CommandEnum, str]]:
         """get keyword list of the query list
 
@@ -180,20 +184,22 @@ class BotModel:
     It will create a automator from user defined script. The script passed
     here should be parsed and well verified.
     """
-    
+
     class StatType(Enum):
         """the enumerate class to describe the stat in automator
         """
         Root = 0
         Serv = 1
         Wait = 2
+
     def __init__(self) -> None:
         """init
-        
+
         It will define its private variables
         """
         self.__stat_table: list[dict] = []
         self.__node_list: list[BotNode] = []
+        self.__setting: dict[str, str] = {}
 
     def build_model(self, script: list) -> None:
         """to parse the script and generate an automator of the bot
@@ -201,11 +207,16 @@ class BotModel:
         Args:
             script (list): the parsed script
         """
+        def load_setting(setting: list[tuple]):
+            for (_, k, v), _ in setting:
+                self.__setting[k] = v
+
         def recursive_build(command: tuple[tuple, list | None]):
             """the function to generate the transition table of the automator
 
             Args:
-                command (tuple[tuple, list): the root command of a low level code block
+                command (tuple[tuple, list): the root command of a low level
+                code block
             """
             node = BotNode()
             self.__node_list.append(node)
@@ -230,7 +241,9 @@ class BotModel:
             for elem in command[1]:
                 elem: tuple[CommandEnum, list | None]
                 try:
-                    if elem[0][0] == CommandEnum.Service:
+                    if elem[0][0] == CommandEnum.Setting:
+                        load_setting(elem[1])
+                    elif elem[0][0] == CommandEnum.Service:
                         last = len(self.__stat_table) - 1
                         recursive_build(elem)
                         servs = self.__stat_table[prev]['serv']
@@ -245,11 +258,14 @@ class BotModel:
                             'cancel': prev
                         })
                         self.__stat_table[prev]['wait'][elem[0][1]] = prev + 1
-                        node.set_query(CommandEnum.ScriptWaiting, elem[0][1], elem[0][2], elem[0][3])
+                        node.set_query(CommandEnum.ScriptWaiting,
+                                       elem[0][1], elem[0][2], elem[0][3])
                     elif elem[0][0] == CommandEnum.Script:
-                        node.set_query(CommandEnum.Script, elem[0][1], elem[0][2])
+                        node.set_query(CommandEnum.Script,
+                                       elem[0][1], elem[0][2])
                     elif elem[0][0] == CommandEnum.Text:
-                        node.set_query(CommandEnum.Text, elem[0][1], elem[0][2])
+                        node.set_query(CommandEnum.Text,
+                                       elem[0][1], elem[0][2])
                     elif elem[0][0] == CommandEnum.FAQ:
                         node.set_faq_keyword(elem[0][1])
                         for ((_, q, a), _) in elem[1]:
@@ -259,7 +275,7 @@ class BotModel:
 
         recursive_build(((CommandEnum.Root, ), script))
 
-    def handle_message(self, stat: int, msg: str=None) -> tuple[int, list[str]]:
+    def handle_message(self, stat: int, msg: str = None) -> tuple[int, list[str]]:
         """handling an user message to generate the response and next stat
 
         Args:
@@ -307,7 +323,7 @@ class BotModel:
                     stat = stat_properties['cancel']
                 else:
                     arg = msg  # the msg is an argument
-                    
+
                     token = stat_properties['token']
                     node = self.__node_list[stat_properties['node']]
                     handle = node.get_query(token)[2]

@@ -1,0 +1,11 @@
+service "service1"
+ text "text test1" "text1"
+ script "script test1" "script1"
+ faq "faq1"
+              "faq test1": "answer1"
+              "faq test2": "answer2"
+              "faq test3": "answer3"
+
+service "service2"
+                            text "text test4" "text4"
+                            script "script test2" "script2"

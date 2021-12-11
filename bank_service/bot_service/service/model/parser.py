@@ -1,6 +1,6 @@
 """the module to parse a file to bot readable script
 
-a simple interpreter to parse the bot defination script,
+a simple interpreter to parse the bot definition script,
 built based on recursive descend analysis.
 
 Typical usage:
@@ -158,7 +158,7 @@ def analyze(lines: list[str]) -> list:
             sub_script = None
             if isinstance(next_elem, list):
                 if cmd_type == CommandEnum.Any or cmd_type not in cmd_mapping:
-                    __logger.error("no sub defination allowed under command at line %d." % (elem[0] + 1))
+                    __logger.error("no sub definition allowed under command at line %d." % (elem[0] + 1))
                     fail_flag = True
 
                 sub_script = recursive_analyze(cmd_type, next_elem)

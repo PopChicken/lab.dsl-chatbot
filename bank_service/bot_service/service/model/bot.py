@@ -15,13 +15,9 @@ import importlib
 import inspect
 
 from enum import Enum, auto
+import logging
 
 from bot_service.service.model.exception import ConflictException
-
-
-PREVIOUS_SECTION = "返回"
-CANCEL_SCRIPT = "取消"
-UNKNOWN_MSG = "祈蒙见恕！小二没理解少侠的意思..."
 
 
 class CommandEnum(Enum):
@@ -199,7 +195,25 @@ class BotModel:
         """
         self.__stat_table: list[dict] = []
         self.__node_list: list[BotNode] = []
-        self.__setting: dict[str, str] = {}
+        # the default settings
+        self.__setting: dict[str, str] = {
+            'name': "Default Bot",
+            'title': "Bot Service",
+            'welcome': "the following are our options:",
+            'subservice': "sub-services:",
+            'option': "Service options:",
+            'am': "AM",
+            'pm': "PM",
+            'cancel': "Cancel",
+            'cancel_info': "You can cancel your operation by sending 'Cancel'",
+            'cancel_success': "Canceled successfully~",
+            'back': "Return",
+            'back_info': "You can return to previous service by sending 'Return'.",
+            'back_success': "Returned successfully~",
+            'other': "If you have any other question, you can ask me directly.",
+            'unkown': "Sorry, I've not understood.",
+            'error': "Unkown error"
+        }
 
     def build_model(self, script: list) -> None:
         """to parse the script and generate an automator of the bot
@@ -248,7 +262,7 @@ class BotModel:
                         recursive_build(elem)
                         servs = self.__stat_table[prev]['serv']
                         if elem[0][1] in servs:
-                            print("conflict in service names.")
+                            logging.getLogger().warn("conflict in service names.")
                         servs[elem[0][1]] = last + 1
                     elif elem[0][0] == CommandEnum.ScriptWaiting:
                         self.__stat_table.append({
@@ -271,9 +285,17 @@ class BotModel:
                         for ((_, q, a), _) in elem[1]:
                             node.set_faq(q, a)
                 except Exception as e:
-                    print(e)
+                    logging.getLogger().warn(e)
 
         recursive_build(((CommandEnum.Root, ), script))
+
+    def get_settings(self) -> dict[str, str]:
+        """get all the settings
+
+        Returns:
+            dict[str, str]: the settings defined in the definition file
+        """
+        return self.__setting.copy()
 
     def handle_message(self, stat: int, msg: str = None) -> tuple[int, list[str]]:
         """handling an user message to generate the response and next stat
@@ -295,7 +317,7 @@ class BotModel:
             Returns:
                 str: welcome message
             """
-            reply = "以下是本庄可以提供的选项~\n"
+            reply = self.__setting['welcome'] + '\n'
             service = list(self.__stat_table[stat]['serv'].keys())
             question = []
             for _, k in node.get_all_query_keys():
@@ -303,22 +325,22 @@ class BotModel:
             if (faq_kw := node.get_faq_keyword()) is not None:
                 question.append(faq_kw)
             if len(service) > 0:
-                reply += '\n'.join(["子服务："] + service) + '\n'
+                reply += '\n'.join([self.__setting['subservice']] + service) + '\n'
             if len(question) > 0:
-                reply += '\n'.join(["服务选项："] + question) + '\n'
-            reply += "如果有其它问题也可以直接和我讲~"
+                reply += '\n'.join([self.__setting['option']] + question) + '\n'
+            reply += self.__setting['other']
             return reply
 
         if msg is None and stat == 0:  # root
-            return (stat, [enter_node(stat, self.__node_list[0]) + f"\n在子服务输入{PREVIOUS_SECTION}可以返回上一级~"])
+            return (stat, [enter_node(stat, self.__node_list[0]) + '\n' + self.__setting['back_info']])
 
         replies = []
         stat_properties = self.__stat_table[stat]
         type = stat_properties['type']
         match type:
             case BotModel.StatType.Wait:
-                if msg == CANCEL_SCRIPT:
-                    replies.append("取消成功~")
+                if msg == self.__setting['cancel']:
+                    replies.append(self.__setting['cancel_success'])
 
                     stat = stat_properties['cancel']
                 else:
@@ -330,12 +352,12 @@ class BotModel:
                     try:
                         reply = handle(arg)
                     except:
-                        reply = "未知错误"
+                        reply = self.__setting['unkown']
                     stat = stat_properties['cancel']
                     replies.append(reply)
             case BotModel.StatType.Serv | BotModel.StatType.Root:
-                if type == BotModel.StatType.Serv and msg == PREVIOUS_SECTION:
-                    replies.append("返回成功~")
+                if type == BotModel.StatType.Serv and msg == self.__setting['back']:
+                    replies.append(self.__setting['back_success'])
 
                     stat = stat_properties['prev']
                     stat_properties = self.__stat_table[stat]
@@ -352,7 +374,7 @@ class BotModel:
                         replies.append(enter_node(stat, next_node))
                     elif msg in stat_properties['wait']:
                         replies.append(node.get_query(msg)[1] + '\n')
-                        replies.append(f"输入{CANCEL_SCRIPT}可以放弃操作~")
+                        replies.append(self.__setting['cancel_info'])
 
                         stat = stat_properties['wait'][msg]
                     elif (query := node.get_query(msg)) is not None:
@@ -364,12 +386,12 @@ class BotModel:
                                 try:
                                     reply = handle()
                                 except:
-                                    reply = "未知错误"
+                                    reply = self.__setting['error']
                                 replies.append(reply)
                     elif msg == node.get_faq_keyword():
                         replies.append(node.get_all_faq())
                     elif (faq := node.search_faq(msg)) is not None:
                         replies.append(faq)
                     else:
-                        replies.append(UNKNOWN_MSG)
+                        replies.append(self.__setting['unknown'])
         return (stat, replies)

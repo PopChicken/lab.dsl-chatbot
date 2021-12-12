@@ -1,14 +1,14 @@
 <template>
-  <chatbox />
+  <portal />
 </template>
 
 <script lang="ts">
 import { Options, Vue } from 'vue-class-component';
-import Chatbox from '@/components/Chatbox.vue';
+import Portal from '@/views/Portal.vue';
 
 @Options({
   components: {
-    Chatbox,
+    Portal
   },
 })
 export default class App extends Vue {}

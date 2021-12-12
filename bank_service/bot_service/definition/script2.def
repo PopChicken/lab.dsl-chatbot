@@ -1,0 +1,14 @@
+settings
+    "name": "Service Bot 1"
+    "title": "Bank Customer Service"
+
+service "Bank service"
+    text "Production" "A: ..., B:..., C:..."
+    script "Evaluate" "evaluate"
+    faq "FAQ"
+        "What's my best option": "Based on your pressure"
+        "What's the difference btw 7d and 1y": "You can google it"
+        "How to use PI": "Go to home page and select the option"
+
+service "Basic financial service"
+    text "Production" "Mobile APP can provide many options"

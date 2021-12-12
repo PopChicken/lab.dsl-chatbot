@@ -211,16 +211,17 @@ class BotModel:
             'back_info': "You can return to previous service by sending 'Return'.",
             'back_success': "Returned successfully~",
             'other': "If you have any other question, you can ask me directly.",
-            'unkown': "Sorry, I've not understood.",
+            'unknown': "Sorry, I've not understood.",
             'error': "Unkown error"
         }
 
-    def build_model(self, script: list) -> None:
+    def build_model(self, script: list) -> bool:
         """to parse the script and generate an automator of the bot
 
         Args:
             script (list): the parsed script
         """
+
         def load_setting(setting: list[tuple]):
             for (_, k, v), _ in setting:
                 self.__setting[k] = v
@@ -285,9 +286,13 @@ class BotModel:
                         for ((_, q, a), _) in elem[1]:
                             node.set_faq(q, a)
                 except Exception as e:
+                    nonlocal success
+                    success = False
                     logging.getLogger().warn(e)
 
+        success = True
         recursive_build(((CommandEnum.Root, ), script))
+        return success
 
     def get_settings(self) -> dict[str, str]:
         """get all the settings

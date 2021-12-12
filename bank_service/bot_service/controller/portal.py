@@ -1,4 +1,4 @@
-"""this module provides the interfaces of session
+"""this module provides the interfaces of protal
 
 Separeted controller module. It will handling the user requests
 and make sure them verified. The verified requests will be packed
@@ -8,15 +8,14 @@ service operations from controllers easily and safely.
 Typical usage example:
 from django.urls import path
 
-import session
+import portal
 
 
 urlpatterns = [
-    path('init', session.init),
-    path('message', session.message)
+    path('option', portal.option)
 ]
 """
-import bot_service.service.data.session as data
+import bot_service.service.data.portal as data
 import bot_service.service.util.validate as validator
 
 from bot_service.service.util.resp import fail, success, expire
@@ -25,8 +24,7 @@ from django.http.request import HttpRequest
 from django.http.response import JsonResponse
 
 
-# json schema defines what init api wants
-init_schema = {
+detail_schema = {
     'type': 'object',
     'required': ['schema'],
     'properites': {
@@ -34,18 +32,9 @@ init_schema = {
     }
 }
 
-# json schema defines what message api wants
-message_schema = {
-    'type': 'object',
-    'required': ['content'],
-    'properties': {
-        'content': {'type': 'string'}
-    }
-}
 
-
-def init(request: HttpRequest) -> JsonResponse:
-    """session initialization api
+def option(request: HttpRequest) -> JsonResponse:
+    """portal option api
 
     Args:
         request (HttpRequest): user request
@@ -53,19 +42,17 @@ def init(request: HttpRequest) -> JsonResponse:
     Returns:
         JsonResponse: response
     """
-    stat, res = validator.validate(request, init_schema)
-    if stat == validator.FAIL:
-        return JsonResponse(res)
-
     try:
-        resp = data.init(request.session, res)
+        resp = data.option()
     except Exception as e:
         return JsonResponse(fail(str(e)))
     return JsonResponse(success(resp))
 
 
-def message(request: HttpRequest) -> JsonResponse:
-    """message handling api
+def detail(request: HttpRequest) -> JsonResponse:
+    """portal detail api
+
+    return the detail of asked schema
 
     Args:
         request (HttpRequest): user request
@@ -73,14 +60,12 @@ def message(request: HttpRequest) -> JsonResponse:
     Returns:
         JsonResponse: response
     """
-    stat, res = validator.validate(request, message_schema)
+    stat, res = validator.validate(request, detail_schema)
     if stat == validator.FAIL:
         return JsonResponse(res)
 
     try:
-        resp = data.message(request.session, res)
-    except TimeoutError as e:
-        return JsonResponse(expire(str(e)))
+        resp = data.detail(res)
     except Exception as e:
         return JsonResponse(fail(str(e)))
 

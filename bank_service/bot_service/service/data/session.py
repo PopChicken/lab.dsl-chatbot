@@ -14,11 +14,12 @@ return JsonResponse(success(resp))
 
 """
 import time
-import threading
-import uuid
+# import threading
+# import uuid
 import bank_service.settings as settings
+from bot_service.service.model.exception import ServiceException
 
-import bot_service.service.model.manager as manager
+import bot_service.service.model.loader as loader
 
 from bot_service.service.util.crontab import Crontab
 
@@ -35,7 +36,7 @@ from django.contrib.sessions.backends.base import SessionBase
 #         del session_locks[key]
 
 
-def init(session: SessionBase) -> list:
+def init(session: SessionBase, req: dict) -> list:
     """init a session (probably re-init)
 
     Args:
@@ -50,7 +51,14 @@ def init(session: SessionBase) -> list:
     # key = session.get('key')
     # if key is None:
     #     session['key'] = str(uuid.uuid4())
+    schema = req['schema']
+    if schema not in loader.bots:
+        raise ServiceException("unknown schema")
+    
+    session['schema'] = schema
     session['status'] = 0
+    
+    bot = loader.bots[schema]
     # if key not in session_locks:
     #     lock = threading.RLock()
     #     session_locks[key] = lock
@@ -61,7 +69,7 @@ def init(session: SessionBase) -> list:
     
     try:
         # lock.acquire()
-        _, reps = manager.bot.handle_message(0, None)
+        _, reps = bot.handle_message(0, None)
         # lock.release()
     except Exception as e:
         # lock.release()
@@ -96,14 +104,20 @@ def message(session: SessionBase, req: dict) -> list:
     # if lock is None:
     #     raise TimeoutError("timeout")
     
+    schema = session.get('schema')
     stat = session.get('status')
 
-    if stat is None:
-        raise Exception("illegal")
+    if schema is None or stat is None:
+        raise ServiceException("illegal access")
+    
+    if schema not in loader.bots:
+        raise ServiceException("non-existed schema")
+    
+    bot = loader.bots[schema]
 
     try:
         # lock.acquire()
-        stat, reps = manager.bot.handle_message(stat, msg)
+        stat, reps = bot.handle_message(stat, msg)
         # lock.release()
     except Exception as e:
         # lock.release()

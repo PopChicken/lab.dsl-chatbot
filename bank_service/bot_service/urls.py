@@ -16,9 +16,12 @@ Including another URLconf
 from django.urls import path
 
 import bot_service.controller.session as session
+import bot_service.controller.portal as portal
 
 
 urlpatterns = [
-    path('init', session.init),
-    path('message', session.message)
+    path('chat/init', session.init),
+    path('chat/message', session.message),
+    path('portal/option', portal.option),
+    path('portal/detail', portal.detail)
 ]

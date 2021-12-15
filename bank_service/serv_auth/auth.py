@@ -1,3 +1,5 @@
+"""auth module. providing JWT preprocess and generation service
+"""
 from jwt import encode as encodeJWT, decode as decodeJWT
 
 import functools
@@ -19,12 +21,14 @@ from bank_service.settings import JWT_EXPIRE_IN, JWT_PUBLIC_PATH, JWT_SECRET_PAT
 
 
 with io.open(JWT_SECRET_PATH, 'rb') as key:
-    JWT_SECRET = key.read()
+    JWT_SECRET = key.read()  # load secret
 with io.open(JWT_PUBLIC_PATH, 'rb') as pub:
-    JWT_PUBLIC = pub.read()
+    JWT_PUBLIC = pub.read()  # load public
 
 
 class ExposeAuthorizationMiddleware:
+    """middleware to allow authorization read by frontend
+    """
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -41,6 +45,17 @@ def generateToken(
     detail: dict = None,
     payload: dict = None
 ) -> str:
+    """generate a jwt
+
+    Args:
+        userId (int, optional): userid. Defaults to None.
+        name (str, optional): username. Defaults to None.
+        detail (dict, optional): detail in jwt rfc. Defaults to None.
+        payload (dict, optional): content to carry. Defaults to None.
+
+    Returns:
+        str: the token
+    """
     if payload is not None:
         token = encodeJWT(
             payload,
@@ -59,6 +74,14 @@ def generateToken(
 
 # 装饰器 更新token 检测过期并重定向
 def preprocessToken(requestHandler: Callable) -> Callable:
+    """decorator. check token before access api
+
+    Args:
+        requestHandler (Callable): the api method
+
+    Returns:
+        Callable: warpped api method
+    """
     @functools.wraps(requestHandler)
     def wrapper(request: HttpRequest):
         # update token here
@@ -106,6 +129,14 @@ sign_schema = {
 
 
 def sign(request: HttpRequest):
+    """simple sign api
+
+    Args:
+        request (HttpRequest): user request
+
+    Returns:
+        JsonResponse: response
+    """
     stat, res = validator.validate(request, sign_schema)
     if stat == validator.FAIL:
         return JsonResponse(res)

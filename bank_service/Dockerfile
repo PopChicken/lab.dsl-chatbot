@@ -2,7 +2,7 @@ FROM python:3.10.0-buster
 
 COPY requirements.txt /bank_service/
 WORKDIR /bank_service/
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple
 
 FROM python:3.10.0-alpine3.15
 

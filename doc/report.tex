@@ -1,0 +1,1595 @@
+\documentclass[hyperref]{ctexart}
+\usepackage[left=2.50cm, right=2.50cm, top=2.50cm, bottom=2.50cm]{geometry} %页边距
+\usepackage{helvet}
+\usepackage{amsmath, amsfonts, amssymb} % 数学公式、符号
+\usepackage[english]{babel}
+\usepackage{graphicx}   % 图片
+\usepackage{url}        % 超链接
+\usepackage{bm}         % 加粗方程字体
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{dirtree}
+\usepackage[algo2e, boxruled, linesnumbered]{algorithm2e}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{multicol}
+\usepackage{hyperref} %bookmarks
+\usepackage{fancyhdr} %设置页眉、页脚
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\renewcommand{\algorithmicrequire}{ \textbf{Input:}}       
+\renewcommand{\algorithmicensure}{ \textbf{Initialize:}} 
+\renewcommand{\algorithmicreturn}{ \textbf{Output:}}     
+%算法格式
+\pagestyle{headings}
+\lhead{}
+\chead{}
+\lfoot{}
+\cfoot{}
+\rfoot{}
+\hypersetup{colorlinks, bookmarks, unicode, linkcolor=black} %unicode
+\setcounter{tocdepth}{3}
+\title{\textbf{支持自定义的可编程客服机器人的设计与实现}}
+\author{\sffamily 2019211649 吉诺}
+\date{(Dated: \today)}
+\begin{document}
+\begin{titlepage}
+    \bfseries{2019211649}
+    \vspace{4cm}
+    \begin{center}
+        \bfseries\huge{程序设计实践}\\
+        \vspace{0.5cm}
+        \bfseries\huge{实验报告}
+        \vspace{3cm}
+        \begin{center}
+          \large
+          \linespread{2}
+          \centering
+          \renewcommand\arraystretch{1.6}
+          \begin{tabular}{p{3cm}P{6cm}}
+            \bfseries{姓名：}           & 吉诺   \\ \cline{2-2}
+            \bfseries{学号：}           & 2019211649  \\ \cline{2-2}
+            \bfseries{报告日期：}        & \today \\ \cline{2-2}
+          \end{tabular}
+        \end{center}
+      \end{center}
+\end{titlepage}
+\tableofcontents
+\maketitle
+{\bf 任务要求：}领域特定语言（Domain Specific Language，DSL）可以提供一种相对简单的文法，用于特定领域的业务流程定制。本作业要求定义一个领域特定脚本语言，这个语言能够描述在线客服机器人（机器人客服是目前提升客服效率的重要技术，在银行、通信和商务等领域的复杂信息系统中有广泛的应用）的自动应答逻辑，并设计实现一个解释器解释执行这个脚本，可以根据用户的不同输入，根据脚本的逻辑设计给出相应的应答。
+\section{系统设计}
+本系统基于前后端分离的交互模式，使用Django与VueJS框架开发。
+\subsection{交互架构设计}
+本节将展现本系统的数据流通与用户交互。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.11]{figure/1.png}
+    \caption{基本架构图}
+    \label{Fig.1.1}
+\end{figure}
+\paragraph{工作流程}
+用一个三元组\texttt{(stage, schema, status)}描述客户端的状态。其中\texttt{stage}的含义是目前客户机的UI在哪一个窗口；\texttt{schema}表示目前客户机选中哪一种客服机器人方案；\texttt{status}表示目前客户机在对话中自动机所处的状态。
+这个元组存储在客户机本地，\texttt{stage}存储在客户机的浏览器内存中；\texttt{schema}与\texttt{stage}经过签名存储在客户机浏览器的站点\texttt{Cookie}中。
+\par \texttt{stage}可取值为\texttt{0,1}，\texttt{0}表示客户机目前处于\texttt{Portal}页面，\texttt{1}表示客户机目前处于\texttt{Chatbox}页面。\texttt{stage}的初始值为\texttt{0}，页面刷新时，其值也会被设置为0，
+也就是说，在用户刚进入页面时与刷新页面时，均会进入\texttt{Portal}页面。关于\texttt{Portal}与\texttt{Chatbox}的细节会在下文体现。
+\par 在\texttt{Portal}页面，客户机前端会向后段发起一个请求，查询可选\texttt{schema}（方案）列表。得到结果之后，会将方案列表展示给用户，让用户选择方案。
+\par 当用户选中一个\texttt{schema}（方案）后，前端会再次向后端发起请求，查询所选方案的设定信息，以加载自定义的客户机\texttt{Chatbox}文案，完成该操作后，会切换到\texttt{Chatbox}页面，同时\texttt{stage}被设置为值\texttt{1}。
+\par 用户进入\texttt{Chatbox}页面后，前端会向后端发起初始化请求，请求内容包含所选方案名称，后端会为前端签发一个经过{\bf 签名}的\texttt{session\_key}，里面包含\texttt{status(=0)}与\texttt{schema}两个信息，客户端保存该信息，由于被后端使用私钥签名，前端不可修改，可视为锁定所选方案（会话期间不可修改），并将\texttt{status}初始化为0。
+\par 这时，用户可以在\texttt{Chatbox}页面与客服机器人对话，每发送一条消息，前端均会向后端发起一次请求，内容为消息字符串。后端接收到请求后，会将用户消息输入构建好的自动机进行处理，将自动机的处理结果——即回复信息以及更新后的\texttt{status}，返回给客户机前端。
+\par 当用户刷新页面，便认为用户退出本次对话，客户机前端不请求后端，清空浏览器内存，\texttt{stage}自动恢复为\texttt{0}，用户回到\texttt{Portal}页面。
+\par 工作流程图解如下。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.16]{figure/2.png}
+    \caption{前端工作流程}
+    \label{Fig.1.2}
+\end{figure}
+\paragraph{用户系统}
+基于\texttt{JWT}构建了用户系统，用户数据存储在后端。前端通过路由钩子实现了登录跳转功能，用户未登录时会自动跳转到登录页面，若登录但过期会在第一次网络通讯时提示用户重新登录。登录功能没有影响\texttt{Portal}的逻辑。
+\paragraph{内容服务器与反向代理}
+Nginx在本架构中提供两个功能，分别是静态内容服务器与反向代理。
+\par 由于使用前后端分离的交互模式，在生产环境，前端是html、css、js与其他静态资源文件，而后端是动态的网络接口，所以需要将前端与后端接口分离。首先，将\texttt{Nginx}配置为静态内容服务器，目录指向前端\texttt{WebPack}打包后的\texttt{dist}文件。
+然后，将\texttt{api/}目录设置为反向代理地址，连接\texttt{Django}提供的\texttt{WSGI}接口，配置转发\texttt{\$host}（主机名），实现单域名前后端，并且避免跨站问题。
+\subsubsection{后端交互架构设计}
+后端架构主要涉及到两个概念，分别是{\bf 站点}与{\bf 应用}，这里的站点\texttt{Bank Service}表示搭载客服机器人服务的站点，其中包含了机器人服务的相关配置。这里的\texttt{Auth}与\texttt{Bot Service}分别表示鉴权服务与机器人服务。两个服务的接口路径位于\texttt{Bank Service}下辖\texttt{api/}路径下。
+\par \texttt{Bot Service}应用依赖于\texttt{Auth}应用，在\texttt{Portal}内的所有操作都需要登录才可以进行。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.13]{figure/3.png}
+    \caption{后端基本架构}
+    \label{Fig.1.3}
+\end{figure}
+\paragraph{\texttt{Bot Service} 架构设计}
+后端在MTC设计模式的基础上进行设计。MTC是MVC的修改版本，与MVC设计模式基本一致。MVC模型全称Model-View-Controller（模型-视图-控制器）三层模型，Django内置后端渲染功能，用Template（模板）替换了传统MVC中的视图，所以称之为MTC设计模式。使用Django开发前后端分离WebApp时，由于不再使用后端渲染，所以只保留Model与Controller两个模块。
+\par Model层在本项目中被命名为Service（服务）层，抽象为一种服务，该服务不考虑网络接口，默认输入均为合法内容，完成业务逻辑的处理，不考虑IO控制。Controller层负责完成接口的构建，不负责任何业务逻辑的处理，但需要维护一个用户友好的网络接口，能够识别非法输入，并且在业务层出现问题时给予用户合理的响应。Controller在确认输入合法时，将输入封装交付给业务层，然后将业务层的处理结果封装返回给用户。
+\par 下图展示了本项目后端机器人WebApp的架构，用户输入经过网络到达控制器，控制器获得的请求体经过\texttt{JSONSchema}校验器验证后将请求交付给业务层的数据接口，数据接口调用更底层的{\bf 模型接口}获得处理结果。处理结果经过Controller的封装，通过网络返回给用户。（JSONSchema与通讯格式会在下文描述）
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.13]{figure/4.png}
+    \caption{后端基本架构}
+    \label{Fig.1.4}
+\end{figure}
+\paragraph{通讯与校验}
+对外开放的后端接口均使用JSON进行通讯，而在控制器将输入交付给业务层数据接口前，需要对用户发送的JSON进行校验，确保格式合法。为完成该功能，这里引入了JSONSchema。
+\par JSONSchema本身是一个JSON对象，它用以描述另一个JSON的特征。在后端接口的设计中，一般使用JSONSchema来进行JSON数据格式验证，在数据提交到业务层次之前进行JSON格式的验证。使用JSONSchema进行JSON校验可以大幅提高后端开发效率。
+\subsubsection{前端架构设计}
+前端基于\texttt{Vue3+TypeScript}构建，使用\texttt{Element Plus}组件库快速成型。基本架构如下图。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.13]{figure/5.png}
+    \caption{前端基本架构}
+    \label{Fig.1.5}
+\end{figure}
+\paragraph{视图} 根组件——\texttt{App}下是\texttt{Router-view}组件，由该组件控制路由，\texttt{/}与\texttt{/sign}分别为\texttt{Portal}与\texttt{Sign}页面。\texttt{Portal}页面控制\texttt{Schema Selector}与\texttt{Chatbox}。
+\paragraph{存储} 由于\texttt{Vuex4}（Vue生态中官方开发的状态管理库）对\texttt{TypeScript}的支持不佳，本项目使用\texttt{Pinia}进行状态管理，其中存储\texttt{Token}，\texttt{Name}与\texttt{Language}信息。状态机\texttt{schema}与\texttt{status}信息存储于\texttt{Cookie}中便于后端修改。内存中储存\texttt{stage}临时信息。
+\paragraph{\texttt{Axios} 封装} 客户端对网络请求进行了抽象，使用\texttt{Axios}库进行\texttt{XHR}请求，并且对\texttt{Axios}库进行了封装。在发起请求时，\texttt{Axios}会在请求头中添加\texttt{Authorization}字段，内容为本地保存的\texttt{JSON Web Token}；得到响应后，会更新本地\texttt{Token}为服务器返回的\texttt{Authorization}字段值。
+\paragraph{i18n——多国语言支持} 客户端添加了多国语言支持。前端可以自动识别用户的系统语言，将界面文案更换为相应的语言。
+\subsubsection{安全性}
+安全性是衡量一个\texttt{WebApp}优劣的重要因素。本系统的后端已经完全无状态化，所有状态信息均存储于前端用户侧，保护系统的安全是非常重要的。\texttt{schema}与\texttt{status}分别是用户选择的方案与自动机当前的状态，若这两个字段可以被用户任意修改，可能会导致后端自动机出现访问越界的情况，产生安全隐患。所以这里对\texttt{Cookie}进行了签名，仅后端可以生成签名，使\texttt{schema}与\texttt{status}在前端相当于只读。
+\texttt{JWT}存储在\texttt{localStorage}不容易被\texttt{CORS}攻击劫持，并且本系统无敏感数据，即使拥有\texttt{token}也无法对系统造成危害。与此同时，用户的密码在发送前经过了\texttt{md5}加盐哈希处理，数据库泄露对用户隐私不造成危害。
+\subsection{高并发系统架构设计}
+本WebApp的设计过程中应用了大量的微服务设计方法，已有的基础上稍加改动，可以设计出支持高并发的Web客服机器人系统。
+\paragraph{集群多实例}
+本系统的机器人客服服务后端不在内存保存任何用户数据（仅\texttt{Auth}使用数据库），所以可以直接使用\texttt{Kubernetes}将后端多实例化，配合\texttt{k8s}提供的\texttt{Load Balancer}（负载均衡器）可以轻松提高系统的并发能力（Python单进程对多核心CPU的利用能力很差，多实例化可以极大提升性能）。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.13]{figure/6.png}
+    \caption{k8s集群设计}
+    \label{Fig.1.6}
+\end{figure}
+\paragraph{缺点——较大的内存消耗}
+一个客服机器人服务需要能够提供多个方案的服务。换言之，每一个客服机器人后端实例都需要维护多个自动机副本，假设有100个方案储存在服务器上，假设k8s开启了50个客服机器人实例，那么就会有5000个自动机保存在内存中，并且100个方案每个方案都有50个一模一样的自动机。
+\paragraph{享元模式}
+享元模式（Flyweight Pattern）主要用于减少创建对象的数量，以减少内存占用和提高性能。这种类型的设计模式属于结构型模式，它提供了减少对象数量从而改善应用所需的对象结构的方式。
+享元模式尝试重用现有的同类对象，如果未找到匹配的对象，则创建新对象。
+\paragraph{优化——时间、空间的平衡}
+虽然容器实例之间无法共享内存，但我们可以考虑享元模式的特点。享元模式的本质是为系统提供了一个高速缓存，不同的对象可以在上面共享内容。借鉴享元模式的思路，本系统也可以引入一个高速缓存，用以保存状态机。
+\par 内存数据库可以作为一个极佳选择，引入\texttt{Redis}以保存状态机。经过性能测试，\texttt{Redis}的\text{QPS}在\texttt{50K}以上，假设一个客服机器人实例可以负担\texttt{200}的\texttt{QPS}，那么一个\texttt{Redis}实例足以驱动\texttt{250}个客服机器人实例。
+\par 如果想支撑更大的\texttt{QPS}，可以引入开启多主从集群模式的\texttt{Redis}，每一个\texttt{Redis}实例保存同样的数据副本，在某个\texttt{Redis}认为自己的负载过高时，会将连接重定向到另一个\texttt{Redis}实例。如下图。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.13]{figure/7.png}
+    \caption{k8s集群设计（优化）}
+    \label{Fig.1.7}
+\end{figure}
+\par 可以发现，\texttt{Deployments}只指向了一个\texttt{Redis}主实例。这是因为\texttt{Redis}的重定向由\texttt{Redis}自身控制，并且十分频繁，如果依然使用\texttt{Service}访问的话，会加大\texttt{Load Balancer}的负载，并且可能使重定向失效。
+\par 在实际使用中，\texttt{Redis}重定向也是直接返回\texttt{k8s}容器网络的内网IP，而非服务名称。
+\par 使用\texttt{Redis}保存自动机显然会增加请求处理的时间消耗，但是\texttt{Redis}实例越多时间越短，\texttt{Redis}实例多到一定程度就不如每个实例都保存所有自动机，时间消耗也最短，内存消耗也最大。由此可见，使用\texttt{Redis}是在时间与空间的消耗间取得一个平衡。
+\subsection{客服机器人服务设计}
+客服机器人主要由三个模块组成，分别是\texttt{parser}、\texttt{bot}与\texttt{loader}。其中，\texttt{parser}负责将一个机器人定义脚本解析为脚本数据结构；\texttt{bot}提供机器人消息响应的接口，并且可以通过脚本数据结构建立对应的机器人模型；\texttt{loader}负责加载本地储存的脚本文件，并使用\texttt{parser}解析，然后将解析得到的脚本数据结构交给\texttt{bot}用以构建机器人模型，最后将机器人模型保存在内存中。
+\subsubsection{DSL定义}
+\label{DSL Def}
+这里先给出一个样例DSL文件，这个样例被部署在\href{https://chatbot.lab.jnn.icu/}{样例机器人}。
+\lstset{
+    basicstyle=\ttfamily,
+    columns=fixed,
+    numbers=left,                                        % 在左侧显示行号
+    numberstyle=\tiny\color{gray},                       % 设定行号格式
+    frame=lrtb,                                          % 不显示背景边框
+    flexiblecolumns,
+    breaklines=true,
+    backgroundcolor=\color[RGB]{255,255,255},            % 设定背景颜色
+    keywordstyle=\color[RGB]{40,40,255},                 % 设定关键字颜色
+    numberstyle=\footnotesize\color[RGB]{50,50,50},
+    commentstyle=\it\color[RGB]{0,96,96},                % 设置代码注释的格式
+    stringstyle=\rmfamily\slshape\color[RGB]{128,0,0},   % 设置字符串格式
+    showstringspaces=false,                              % 不显示字符串中的空格
+}
+\begin{lstlisting}
+settings
+    "name": "柜台小二 甲零零壹"
+    "title": "钱庄业务"
+    "welcome": "以下是本庄可以提供的选项~"
+    "subservice": "子服务："
+    "option": "服务选项："
+    "am": "午时"
+    "pm": "午後"
+    "cancel": "取消"
+    "cancel_info": "输入“取消”可以取消操作～"
+    "cancel_success": "取消成功～"
+    "back": "返回"
+    "back_info": "在子服务输入“返回”可以返回上一级服务～"
+    "back_success": "返回成功～"
+    "other": "如果有其它问题也可以直接和我讲~"
+    "unknown": "祈蒙见恕！小二没理解少侠的意思..."
+    "error": "未知错误"
+
+service "理财"
+    text "产品介绍" "A产品：中风险...; B产品：低风险; C产品：高风险"
+    script "理财产品推荐评估" "evaluate"
+    faq "常见问题"
+        "我适合什么样的理财产品？": "选择理财产品需要根据自己对风险的承受能力，可以问我“理财产品推荐评估”进行评估。"
+        "七日年化利率与年利率有什么区别？": "七日年化利率是通过过去七日的收益情况估计的年利率，未来具有不确定性；而年利率是固定的，没有不确定性。"
+        "如何使用定期投资功能？": "前往首页，在金融功能栏下可以看到定期投资功能。"
+
+service "基础金融业务"
+    text "产品介绍" "手机银行APP可以使用转账、查询、账户管理、新卡申请、新卡激活、银行卡管理等功能"
+    script "附近网点查询" "输入你的位置" "querybranch"
+\end{lstlisting}
+本系统定义的机器人声明脚本拥有如下的语法特征：
+\begin{itemize}
+    \item 使用缩进表示代码块，支持任意长度的空格缩进；
+    \item 更长的缩进表示更低的级别，更低级别的代码块从属于上方的第一个更高级别语句；
+    \item 一行只能有一个语句，即语句以换行符为句尾。
+\end{itemize}
+本系统定义的机器人声明脚本拥有以下语句：
+\paragraph{根}
+\texttt{root}
+\par 文档的根，是隐藏的语句，所有缩进为0的语句均属于文档的根。
+\paragraph{设置}
+\texttt{settings}
+\par 本语句只有一个\texttt{settings}关键字，表示其代码块为设定内容，本语句的代码块用于描述客服机器人的信息（如客服名称、业务名称），并且决定显示在客户端的文本内容。
+\par \texttt{settings}语句的代码块中仅允许出现{\bf 键值对}语句。
+\par 考虑到随着版本迭代设置选项可能会频繁修改，所以这里并没有对settings的键值对做严格的限定，所有选项均为可选选项（机器人模型内有默认值）。目前版本的可选选项如下：
+\begin{itemize}
+    \item name: 机器人客服的名称；
+    \item title: 客服业务的标题；
+    \item welcome: 进入某个子服务或者刚刚进入对话页面时菜单的欢迎语；
+    \item subservice: 菜单子服务文案；
+    \item option: 菜单服务选项文案；
+    \item am: 上午时间文案；
+    \item pm: 下午时间文案；
+    \item cancel: 取消脚本执行的口令；
+    \item cancel\_info: 取消脚本的提示文案；
+    \item cancel\_success: 取消成功文案；
+    \item back: 返回上一级服务口令；
+    \item back\_info: 返回上一级服务的提示文案；
+    \item back\_success: 返回成功文案；
+    \item other: 其它问题文案；
+    \item unknown: 未识别的输入文案；
+    \item error: 未知错误文案。
+\end{itemize}
+\paragraph{子服务}
+\texttt{service <name>}
+\par 描述子服务的代码块，\texttt{<name>}为出现在菜单中的子服务名称。表示其代码块为子服务选项列表。
+\par \texttt{service}语句的代码块中仅允许出现{\bf 子服务}语句、{\bf 文本选项}语句、{\bf 脚本选项}语句、{\bf 接受参数的脚本选项}语句和{\bf 常见问题}语句。
+\paragraph{文本选项}
+\texttt{text <name> <answer>}
+\par 表示一个简单的回答选项，\texttt{<name>}为出现在菜单中的服务选项名称，\texttt{<answer>}为用户选择该选项时的回复内容。
+\par \texttt{text}语句不允许拥有代码块。
+\paragraph{脚本选项}
+\texttt{script <name> <module>}
+\par 表示一个脚本选项。\texttt{<name>}为出现在菜单中的服务选项名称，\texttt{<module>}为用户选择该选项时所执行的\texttt{Python}模块。系统要求模块内必须包含\texttt{handle()}函数。
+用户选择该选项时，系统会执行指定模块的\texttt{handle()}方法，并回复返回值。该方法用于实现复杂的查询功能。
+\par \texttt{script}语句不允许拥有代码块。
+\paragraph{接受参数的脚本选项}
+\texttt{script <name> <tips> <module>}
+\par 表示一个接受参数的脚本选项。\texttt{<name>}为出现在菜单中的服务选项名称，\texttt{<tips>}表示用户选择该选项后回复的内容，用于指导用户输入参数，\texttt{<module>}为用户选择该选项并且输入参数后所执行的\texttt{Python}模块。
+系统要求模块内必须包含\texttt{handle(arg: string)}函数。用户选择该选项并输入参数后，系统会将用户输入的参数作为arg执行指定模块的\texttt{handle(arg: string)}方法，并回复返回值。该方法用于实现复杂的查询功能。
+\par \texttt{script}语句不允许拥有代码块。
+\paragraph{常见问题}
+\texttt{faq <name>}
+\par 表示一个常见问答选项。\texttt{<name>}为出现在菜单中的服务选项名称。该语句表示其代码块为常见问答内容，本语句的代码块用于作为未被其他选项捕获的消息的缺省查询集。
+所有没有命中其他选项的消息会被检查是否被问答语句代码块中任意键包含，如果包含，会返回所有包含它的\texttt{QA}问答对作为回复。如果不包含，说明用户输入了模型无法处理的输入。
+\par \texttt{faq}语句的代码块中仅允许出现{\bf 键值对}语句。
+\paragraph{键值对}
+\texttt{<key>: <value>}
+\par 表示一个键值对，\texttt{<key>}和\texttt{<value>}可以为任何内容，其含义视情况而定。在作为\texttt{settings}的子语句时表示设置选项；在作为\texttt{faq}的子语句时表示\texttt{QA}问答选项。
+\par \texttt{K-V}语句不允许拥有代码块。
+\subsubsection{解析器}
+解析器的任务是解析一个脚本文件，并输出解析得到的脚本对象，在过程中如果发生错误，需要输出错误以提示用户。发生错误后需要进行错误恢复，继续进行解析，确保一次解析可以输出全部错误。
+\par 一次解析任务有两个阶段：
+\begin{itemize}
+    \item 结构解析：跳过空行，将缩进解析为语句级别，构造代码块，使用广义表储存（每一个代码块都是一个数组，代码块内一行非空文本是一个元素，代码块内的更低级别代码块也是一个数组）。
+    \item 语法-语义分析：分析结构解析得到的脚本结构，逐行分析文本，尝试将文本解析为语句。若语句解析失败，抛出错误并继续分析。语义分析是指，每个代码块从属于某一个语句，而语句决定了从属于它的代码块内允许出现的语句，分析器会检测出现的语句是否合法，如果不合法会抛出错误并继续分析。若一个无法识别的语句包含代码块，则允许其代码块包含任意语句，以继续分析。
+\end{itemize}
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.18]{figure/8.png}
+    \caption{解析器基本流程}
+    \label{Fig.1.8}
+\end{figure}
+\par 为进行错误恢复，使用一个标识变量表示错误，分析结束后，如果存在错误标记，则解析失败，返回空。否则解析成功，返回得到的脚本对象。
+\paragraph{结构解析器}
+结构解析器的工作流程如下：
+\begin{enumerate}
+    \item 创建一个栈以存储代码块；
+    \item 逐行遍历脚本文件；
+    \item 若行文本为空（换行符、回车、空格），跳过；
+    \item 非空，获取缩进空格数目，储存为\texttt{level}（值越高语句的从属级别越低），对行文本进行如下处理：
+    \begin{itemize}
+        \item 若\texttt{level}与栈顶\texttt{level}相等，则说明它们属于同一代码块，将文本加入栈顶的代码块。
+        \item 若\texttt{level}大于栈顶\texttt{level}，说明它属于栈顶元素的代码块，将本行语句与\texttt{level}压入栈中。并将本行文本构成的新代码块列表加入原栈顶元素的代码块中。
+        \item 若\texttt{level}小于栈顶\texttt{level}，说明它属于栈顶元素代码块外侧的{\bf 某个}代码块，需要往前扫描栈寻找所属的代码块。扫描直到\texttt{level}与扫描到的代码块的\texttt{level}相等，将本位置之前的栈元素全部弹出，将本行文本加入新栈顶元素的代码块中。若扫描到栈元素的\texttt{level}小于行文本\texttt{level}时都没有找到相等的\texttt{level}，说明发生了缩进错误，跳过该行并将错误标识设置为真。
+    \end{itemize}
+    \item 遍历结束，此时栈底的元素（0级代码块）是结构化的脚本文本对象。取出该元素，作为语法-语义分析的输入。
+\end{enumerate}
+\paragraph{语法-语义分析器}
+在说明语法-语义分析器的工作流程前，需要引入语句类型的概念。在本系统中，任何语句都属于以下几个类型：
+\begin{itemize}
+    \item \texttt{Root} 根
+    \item \texttt{Service} 子服务
+    \item \texttt{Text} 文本
+    \item \texttt{Script} 脚本
+    \item \texttt{ScriptWaiting} 接受参数的脚本
+    \item \texttt{FAQ} 常见问题
+    \item \texttt{KVItem} 键值对
+    \item \texttt{Setting} 设定
+    \item \texttt{Any} 任意
+\end{itemize}
+除了\texttt{Any}类型，以上几个类型与\texttt{DSL}中定义的类型一一对应。\texttt{Any}仅出现于语法-语义分析过程，表示一个语句是无法被识别的，此时这个语句的代码块内允许任意语句，这个类型用于错误恢复并继续分析。
+\par 语法-语义分析器使用了类似递归下降分析的方法，其分析函数（递归函数）接受两个参数，第一个是代码块父亲语句的类型，第二个是结构解析器得到的结构化的代码块，返回值为分析得到的语句列表，其流程如下：
+\begin{enumerate}
+    \item 初始化一个语句列表\texttt{script}；
+    \item 遍历输入的文本代码块列表；
+    \item 遍历时取当前元素\texttt{elem}的下一个元素\texttt{next\_elem}；
+    \item 若\texttt{elem}的类型是列表，跳过；
+    \item 使用语法分析工具识别该\texttt{elem}的文本，如果成功接受，则得到语句，否则输出语法错误信息，并将语句的类型设置为\texttt{Any}。
+    \item 检查\texttt{elem}语句的类型是否在父语句的代码块中允许出现，如果不允许，输出非法语句错误。
+    \item 如果\texttt{elem\_next}的类型是列表，说明\texttt{elem\_next}是属于\texttt{elem}的代码块，执行分析函数的递归调用，参数为\texttt{elem}的类型与\texttt{elem\_next}的代码列表。
+    \item 如果发生了上方的解析，则将解析结果（代码块语句列表）保存为列表\texttt{block}，如果未发生上方的解析，则\texttt{block}为空。将\texttt{elem}解析得到的语句与\texttt{block}合成一个结构放入\texttt{script}中。
+\end{enumerate}
+\subsubsection{客服机器人模型}
+得到解析结果后，将脚本对象传递给客服机器人模块以建立机器人模型。客服机器人模型内有如下两个核心概念：
+\begin{itemize}
+    \item 节点：根节点或服务节点，储存一个子服务的或者根的服务选项、子服务选项与\texttt{FAQ}信息。提供各类选项的\texttt{getter}和\texttt{setter}。
+    \item 状态转移表：客服机器人状态机的核心，每一个表项代表一个状态，每一列为不同条件的转移结果。状态分为以下三种：
+    \begin{itemize}
+        \item \texttt{Root} 根：表示用户与机器人的会话处于根节点；
+        \item \texttt{Serv} 服务：表示用户与机器人的会话处于服务节点；
+        \item \texttt{Wait} 等待：表示用户与机器人的会话正在等待用户输入参数（带参数的脚本语句）。
+    \end{itemize}
+    \item 转移函数：用户输入会进入转移函数，会根据是否满足转移条件与是否匹配节点中的选项决定下一个状态与回复的信息。
+\end{itemize}
+\paragraph{节点}
+节点用来储存根或者服务的服务选项，内有三个数据项，分别是\texttt{query}、\texttt{faq\_keyword}与\texttt{faq}。
+\begin{itemize}
+    \item \texttt{query} 查询：储存\texttt{text}选项、\texttt{script}选项与接受参数的\texttt{script}选项，三者注册的口令不允许重复，重复注册会抛出异常；
+    \item \texttt{faq\_keyword} \texttt{FAQ}口令：用户输入\texttt{FAQ}口令时，节点会返回完整的FAQ文本，FAQ口令不允许重复注册，重复注册会抛出异常；
+    \item \texttt{faq} \texttt{FAQ}集：当用户的输入未与上方两个数据项提供的口令匹配时，程序会在\texttt{FAQ}集中搜索用户输入，返回搜索结果。
+\end{itemize}
+节点数据结构本身不区分根与子服务，区分根与子服务是因为根没有上级服务，在状态转移表与转移函数中的处理与子服务不同。
+\paragraph{状态转移表}
+这里基于\href{DSL Def}{DSL定义}的样例对应的状态转移表进行说明。
+主表：
+\begin{center}        
+\begin{tabular}{|c|c|c|c|c|c|c|c|}% col8
+    \hline
+    status & type & node & prev & serv & token & wait & cancel \\
+    \hline
+    0 & Root & 0 & & S1 & & & \\
+    \hline
+    1 & Serv & 1 & 0 & & & & \\
+    \hline
+    2 & Serv & 2 & 1 & & & W1 & \\
+    \hline
+    3 & Wait & 2 & & & \makecell*[c]{"附近网\\点查询"} & & 2 \\
+    \hline
+\end{tabular}
+\end{center}
+子表S1：
+\begin{center}        
+\begin{tabular}{|c|c|c|c|c|c|c|c|}% col8
+    \hline
+    name & status \\
+    \hline
+    "理财" & 1 \\
+    \hline
+    "基础金融业务" & 2 \\
+    \hline
+\end{tabular}
+\end{center}
+子表W1:
+\begin{center}        
+\begin{tabular}{|c|c|c|c|c|c|c|c|}% col8
+    \hline
+    name & status \\
+    \hline
+    "附近网点查询" & 3 \\
+    \hline
+\end{tabular}
+\end{center}
+主表有四个项，表示有四个状态。\texttt{Root}类型表示根节点，只有\texttt{node}与\texttt{serv}字段可有值；\texttt{Serv}类型表示子服务，只有\texttt{node}、\texttt{serv}、\texttt{prev}和\texttt{wait}字段可有值；\texttt{Wait}类型表示正在等待输入参数的接受参数的脚本选项，仅\texttt{node}、\texttt{token}与\texttt{cancel}字段可有值。
+\par 主表的8个字段分别表示：
+\begin{enumerate}
+    \item status: 状态号；
+    \item type: 状态类型；
+    \item node: 所属节点；
+    \item prev: 返回时的上级状态；
+    \item serv: 下属子服务；
+    \item token: 选项名称；
+    \item wait: 下属接受参数的脚本选项；
+    \item cancel: 取消时的上级状态。
+\end{enumerate}
+\par 子表\texttt{S1}用以储存子服务状态转移关系。以第一个表项为例，当用户输入\texttt{理财}时，自动机的状态会转移到\texttt{1}。
+\par 子表\texttt{W1}用以储存接受参数的脚本选项的状态转移关系。以第一个表项为例，当用户输入\texttt{附近网点查询}时，自动机会查询\texttt{node[2]}内的选项详细信息，输出一个参数提示，并转移到状态\texttt{3}。
+\paragraph{转移函数}
+用户的初始状态为0。转移函数接受用户的输入\texttt{msg}与会话的当前状态\texttt{status}，并且返回新的状态（也可能不变）与回复文本。下面是转移函数的工作流程：
+\begin{itemize}
+    \item 若\texttt{msg}为空，\texttt{status}为0，返回进入根节点的欢迎信息；
+    \item 若\texttt{status}的\texttt{type}为\texttt{Wait}，进入以下流程：
+    \begin{enumerate}
+        \item 如果\texttt{msg}为\texttt{cancel}口令，则取消执行接受参数的指令，根据转移表转移到上一级；
+        \item 根据转移表的\texttt{token}在\texttt{node}中获取指令处理函数，调用该函数并返回结果。最后根据转移表转移到上一级。
+    \end{enumerate}
+    \item 若\texttt{status}的\texttt{type}为\texttt{Serv}或\texttt{Root}，进入以下流程：
+    \begin{enumerate}
+        \item 若\texttt{status}的\texttt{type}为\texttt{Serv}且\texttt{msg}为\texttt{back}口令，则表示退出本级子服务，根据转移表转移到上一级，并输出欢迎信息；
+        \item 否则若\texttt{msg}在\texttt{status}的\texttt{serv}子表\texttt{name}字段中，则转移到对应的子服务状态，并输出欢迎信息；
+        \item 否则若\texttt{msg}在\texttt{status}的\texttt{wait}子表\texttt{name}字段中，则在\texttt{node}找到指令的详细信息，输出\texttt{tips}，转移到对应的等待状态，等待用户输入参数；
+        \item 否则若\texttt{msg}在\texttt{status}的\texttt{node}的\texttt{query}集中，则返回对应的查询结果，不发生状态转移；
+        \item 否则若\texttt{msg}为\texttt{status}的\texttt{node}的\texttt{faq\_keyword}，则返回完整的\texttt{FAQ}文本，不发生状态转移；
+        \item 否则若\texttt{msg}在\texttt{status}的\texttt{node}的\texttt{faq}中搜素有返回值（可以搜到），则返回搜索到的\texttt{FAQ}文本，不发生状态转移；
+        \item 否则\texttt{msg}是无法识别的输入，返回\texttt{unknown}文本，不发生状态转移。
+    \end{enumerate}
+\end{itemize}
+\subsubsection{脚本加载器}
+脚本加载器负责将后端指定文件夹内的脚本全部加载到内存中，并建立对应的机器人模型，并且在后端运行过程中为业务层数据接口提供模型信息，并处理消息回复与状态转移。
+\par 脚本加载器在内存中维护一个字典，键为\texttt{schema}的标识符，值为\texttt{bot}机器人模型。
+\par 脚本加载器相当于连接后端业务层与机器人模型的桥梁。
+\section{程序实现}
+\subsection{后端}
+\subsubsection{站点配置}
+站点是\texttt{Django}内的概念。站点用于装载多个不同的应用，将他们分配到不同的路径下。
+\lstset{
+    language=python
+}
+\begin{lstlisting}
+import bot_service.urls as bot_urls
+import serv_auth.urls as auth_urls
+
+from django.urls import path
+from django.urls.conf import include
+
+
+urlpatterns = [
+    path('api/bot/', include(bot_urls)),
+    path('api/auth/', include(auth_urls))
+]
+\end{lstlisting}
+\texttt{bot\_service}应用的\texttt{URL}被配置到\texttt{api/bot/}下。\\
+\texttt{serv\_auth}应用的\texttt{URL}被配置到\texttt{api/auth/}下。
+\subsubsection{控制器}
+因为\texttt{serv\_auth}提供的功能非常简单，没有使用分层设计，所以这里的控制器与业务层均指代\texttt{bot\_service}的控制器与业务层。
+这里以\texttt{portal}接口的设计为例：
+\begin{lstlisting}
+"""this module provides the interfaces of protal
+
+Separeted controller module. It will handling the user requests
+and make sure them verified. The verified requests will be packed
+into dict then be sent to service layout. The benefit is extract
+service operations from controllers easily and safely.
+
+Typical usage example:
+from django.urls import path
+
+import portal
+
+
+urlpatterns = [
+    path('option', portal.option)
+]
+"""
+import bot_service.service.data.portal as data
+import bot_service.service.util.validate as validator
+import serv_auth.auth as auth
+
+from bot_service.service.util.resp import fail, success, expire
+
+from django.http.request import HttpRequest
+from django.http.response import JsonResponse
+
+
+detail_schema = {
+    'type': 'object',
+    'required': ['schema'],
+    'properites': {
+        'schema': {'type': 'string'}
+    }
+}
+
+
+@auth.preprocessToken
+def option(request: HttpRequest) -> JsonResponse:
+    """portal option api
+
+    Args:
+        request (HttpRequest): user request
+
+    Returns:
+        JsonResponse: response
+    """
+    try:
+        resp = data.option()
+    except Exception as e:
+        return JsonResponse(fail(str(e)))
+    return JsonResponse(success(resp))
+
+
+@auth.preprocessToken
+def detail(request: HttpRequest) -> JsonResponse:
+    """portal detail api
+
+    return the detail of asked schema
+
+    Args:
+        request (HttpRequest): user request
+
+    Returns:
+        JsonResponse: response
+    """
+    stat, res = validator.validate(request, detail_schema)
+    if stat == validator.FAIL:
+        return JsonResponse(res)
+
+    try:
+        resp = data.detail(res)
+    except Exception as e:
+        return JsonResponse(fail(str(e)))
+
+    return JsonResponse(success(resp))
+\end{lstlisting}
+程序中的文档注释按照Google的\texttt{Python}开发规范编写。
+\par 这个文件展示了网络接口的特征与\texttt{JSONSchema}的使用，网络接口中先通过\texttt{JSONSchema}校验请求体，然后再将格式化后的请求交给\texttt{data}（业务层数据接口）处理。
+\paragraph{校验器模块}
+后端基于\texttt{JSONSchema}，简单封装了校验器，保存为\texttt{util.validate}，校验函数实现如下：
+\begin{lstlisting}
+def validate(http_req: HttpRequest, schema: object) -> Tuple[bool, dict]:
+    """validate a request with a schema
+
+    Args:
+        http_req (HttpRequest): an user http request
+        schema (object): a json schema matches the wanted request
+
+    Returns:
+        Tuple[bool, dict]: (status, a verified request dict or failing response)
+    """
+    try:
+        req = json.loads(http_req.body)
+        jsonschema.validate(req, schema=schema)
+    except JSONDecodeError:
+        return FAIL, resp.fail("bad json format")
+    except ValidationError as e:
+        return FAIL, resp.fail(f"bad request body: {e.message}")
+    return SUCCESS, req
+\end{lstlisting}
+该函数会校验请求，如果发现异常会返回包含错误信息的\texttt{JSON}响应（字典），否则，会返回一个请求体（字典）。
+\paragraph{\texttt{resp}封装}
+\texttt{resp}模块封装了三种基本响应信息，分别是失败、成功与超时，控制器统一使用该封装生成响应，确保了响应体格式的统一。
+\begin{lstlisting}
+"""a simple module to generate specified response
+"""
+def fail(msg: str) -> dict:
+    """when a request's response fails to make, use this
+
+    Args:
+        msg (str): message to describe details of the failure
+
+    Returns:
+        dict: the response
+    """
+    resp = {
+        'code': 1,
+        'msg': msg,
+        'data': None
+    }
+    return resp
+
+
+def expire(msg: str) -> dict:
+    """DEPRECATED. when something like session expired, use this.
+
+    Args:
+        msg (str): message to describe details of the expiration
+
+    Returns:
+        dict: the response
+    """
+    resp = {
+        'code': 2,
+        'msg': msg,
+        'data': None
+    }
+    return resp
+
+
+def success(resp_body: dict | list=None) -> dict:
+    """to generate the success response
+
+    Args:
+        resp_body (dict, optional): the data in response. can be a dict
+        or list. Defaults to None.
+
+    Returns:
+        dict: the response
+    """
+    resp = {
+        'code': 0,
+        'msg': "success",
+        'data': resp_body
+    }
+    return resp
+\end{lstlisting}
+\subsubsection{业务层数据接口}
+数据接口接收控制器传递来的请求，处理完成后返回给控制器。数据接口要求传递来的请求是合法的。这里以\texttt{portal}数据接口为例。
+\begin{lstlisting}
+"""this module provides the implementations of session api
+
+Separeted service module. It will handling the verified user
+requests passed from controllers. The verified request is a 
+legal dict object, which means the function inside this module
+do not need any verification to see if the input is illegal.
+
+Typical usage example:
+try:
+    resp = data.func(request)
+except Exception as e:
+    return JsonResponse(fail(str(e)))
+return JsonResponse(success(resp))
+
+"""
+import bot_service.service.model.loader as loader
+
+from django.contrib.sessions.backends.base import SessionBase
+
+
+def option() -> list:
+    """show all the options
+
+    Args:
+        session (SessionBase): a user session
+
+    Returns:
+        list: option list
+    """
+
+    rep = []
+    for schema_id, bot in loader.bots.items():
+        settings = bot.get_settings()
+        title = settings['title']
+        rep.append({
+            'schema': schema_id,
+            'title': title
+        })
+    return rep
+
+
+def detail(req: dict) -> dict:
+    """get detail of specified schema
+
+    Args:
+        session (SessionBase): a user session
+
+    Returns:
+        list: detail
+    """
+    bot = loader.bots.get(req['schema'])
+    if bot is None:
+        return {}
+    return bot.get_settings()
+\end{lstlisting}
+\subsubsection{鉴权}
+鉴权模块提供了装饰器\texttt{preprocessToken}，在请求真正被\texttt{API}处理前，会被鉴权模块检查。鉴权模块会尝试对\texttt{JWT}进行解码，如果失败或超时，会回复携带对应错误码的响应。
+\par 鉴权模块还提供了登录/注册接口\texttt{sign}，如果用户不存在会自动注册，存在则登录。
+\begin{lstlisting}
+"""auth module. providing JWT preprocess and generation service
+"""
+from jwt import encode as encodeJWT, decode as decodeJWT
+
+import functools
+import io
+import time
+import jwt
+
+import bot_service.service.util.validate as validator
+import serv_auth.models as models
+
+from bot_service.service.util.resp import fail, success, expire
+
+from typing import Callable
+
+from django.http.request import HttpRequest
+from django.http.response import JsonResponse
+
+from bank_service.settings import JWT_EXPIRE_IN, JWT_PUBLIC_PATH, JWT_SECRET_PATH
+
+
+with io.open(JWT_SECRET_PATH, 'rb') as key:
+    JWT_SECRET = key.read()  # load secret
+with io.open(JWT_PUBLIC_PATH, 'rb') as pub:
+    JWT_PUBLIC = pub.read()  # load public
+
+
+class ExposeAuthorizationMiddleware:
+    """middleware to allow authorization read by frontend
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response['Access-Control-Expose-Headers'] = "Authorization"
+        return response
+
+
+# 生成token
+def generateToken(
+    userId: int = None,
+    name: str = None,
+    detail: dict = None,
+    payload: dict = None
+) -> str:
+    """generate a jwt
+
+    Args:
+        userId (int, optional): userid. Defaults to None.
+        name (str, optional): username. Defaults to None.
+        detail (dict, optional): detail in jwt rfc. Defaults to None.
+        payload (dict, optional): content to carry. Defaults to None.
+
+    Returns:
+        str: the token
+    """
+    if payload is not None:
+        token = encodeJWT(
+            payload,
+            JWT_SECRET, algorithm="RS256")
+    else:
+        token = encodeJWT({
+            'id': userId,
+            'name': name,
+            'exp': int(time.time()) + JWT_EXPIRE_IN,
+            'detail': detail
+        }, JWT_SECRET, "RS256")
+    if isinstance(token, bytes):
+        token = token.decode('utf-8')
+    return token
+
+
+# 装饰器 更新token 检测过期并重定向
+def preprocessToken(requestHandler: Callable) -> Callable:
+    """decorator. check token before access api
+
+    Args:
+        requestHandler (Callable): the api method
+
+    Returns:
+        Callable: warpped api method
+    """
+    @functools.wraps(requestHandler)
+    def wrapper(request: HttpRequest):
+        # update token here
+        token = request.META.get('HTTP_AUTHORIZATION')
+        if token is None:
+            return JsonResponse({
+                'code': 50008,
+                'msg': 'need login'
+            })
+        try:
+            try:
+                payload = decodeJWT(token, JWT_PUBLIC, algorithms=['RS256'])
+                payload['exp'] = int(time.time()) + JWT_EXPIRE_IN
+                token = generateToken(payload=payload)
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({
+                    'code': 50014,
+                    'msg': 'token expired'
+                })
+            except jwt.DecodeError:
+                return JsonResponse({
+                    'code': 50008,
+                    'msg': 'token broken'
+                })
+        except Exception as e:
+            print(e)
+            return JsonResponse({
+                'code': 0,
+                'message': 'error occured while handling token'
+            })
+        response: JsonResponse = requestHandler(request)
+        response['Authorization'] = token
+        return response
+    return wrapper
+
+
+sign_schema = {
+    'type': 'object',
+    'required': ['username', 'pwd'],
+    'properties': {
+        'username': {'type': 'string', 'minLength': 4, 'maxLength': 32, 'pattern': r'[a-z0-9A-Z_]+'},
+        'pwd': {'type': 'string', 'length': 32}
+    }
+}
+
+
+def sign(request: HttpRequest):
+    """simple sign api
+
+    Args:
+        request (HttpRequest): user request
+
+    Returns:
+        JsonResponse: response
+    """
+    stat, res = validator.validate(request, sign_schema)
+    if stat == validator.FAIL:
+        return JsonResponse(res)
+    
+    res['username'].lower()
+    
+    reg = False
+    
+    try:
+        user = models.User.objects.get(name=res['username'])
+    except models.User.DoesNotExist:
+        reg = True
+    
+    if reg:
+        user = models.User()
+        user.name = res['username']
+        user.pwd = res['pwd']
+        user.save()
+        
+        token = generateToken(user.id, res['username'])
+    else:
+        user: models.User
+        if user.pwd != res['pwd']:
+            return JsonResponse(fail('wrong password.'))
+        token = generateToken(user.id, res['username'])
+    
+    resp = JsonResponse(success())
+    resp['Authorization'] = token
+    return resp    
+
+\end{lstlisting}
+\subsubsection{业务层客服机器人}
+本章节的代码篇幅过长，所以不再展示。
+\paragraph{解析器}
+解析器完全按照系统设计章节提出的架构实现。
+\paragraph{机器人模型}
+机器人模型完全按照系统设计章节提出的架构实现。
+\paragraph{加载器}
+加载器完全按照系统设计章节提出的架构实现。
+\subsection{前端}
+主要展示\texttt{Portal}与\texttt{Chatbox}。
+\subsubsection{UI设计}
+前端实现了\texttt{i18n}自动语言切换功能，由于开发软件时使用的系统语言为英语，这里UI的语言显示为英语。
+\paragraph{响应式}
+响应式用于实现对移动端的兼容，本系统的前端使用\texttt{CSS}的\texttt{@media}标签实现响应式。以屏宽\texttt{960px}为分界线，小于阈值的屏幕中聊天窗口切换至全屏，而大于这个阈值的屏幕则会显示固定大小的聊天窗口。
+\paragraph{配色}
+最初设计中，聊天系统是模拟一个古代钱庄的前台服务，所以采用了传统的中国色配色。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.5]{figure/13.png}
+    \caption{配色}
+    \label{Fig.1.13}
+\end{figure}
+\newpage
+\begin{multicols}{2}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.2]{figure/14.png}
+        \caption{PC端Sign}
+        \label{Fig.1.14}
+    \end{figure}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.2]{figure/9.png}
+        \caption{PC端Portal}
+        \label{Fig.1.9}
+    \end{figure}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.2]{figure/10.png}
+        \caption{PC端Chatbox}
+        \label{Fig.1.10}
+    \end{figure}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.22]{figure/15.png}
+        \caption{Mobile端Sign}
+        \label{Fig.1.15}
+    \end{figure}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.22]{figure/11.png}
+        \caption{Mobile端Portal}
+        \label{Fig.1.11}
+    \end{figure}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[scale=0.22]{figure/12.png}
+        \caption{Mobile端Chatbox}
+        \label{Fig.1.12}
+    \end{figure}
+\end{multicols}
+\subsubsection{\texttt{axios}封装}
+\lstset{
+    language=java
+}
+\begin{lstlisting}
+import axios from 'axios'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import { getToken, setToken } from '@/utils/auth'
+import { useStore } from '@/store'
+import i18n from '@/languages'
+
+// create an axios instance
+const service = axios.create({
+  baseURL: process.env.VUE_APP_API, // url = base url + request url
+  // withCredentials: true, // send cookies when cross-domain requests
+  timeout: 5000 // request timeout
+})
+
+// request interceptor
+service.interceptors.request.use(
+  config => {
+    // do something before request is sent
+    const token = getToken()
+
+    if (token.length > 0) {
+      // let each request carry token
+      // ['X-Token'] is a custom headers key
+      // please modify it according to the actual situation
+      // axios.defaults.headers.common['Authorization'] = getToken()
+
+      // console.log(axios.defaults.headers.common['Authorization'])
+      const header = config.headers as any
+      header.Authorization = getToken();
+    }
+    return config
+  },
+  error => {
+    // do something with request error
+    console.log(error) // for debug
+    return Promise.reject(error)
+  }
+)
+
+// response interceptor
+service.interceptors.response.use(
+  /**
+   * If you want to get http information such as headers or status
+   * Please return  response => response
+  */
+
+  /**
+   * Determine the request status by custom code
+   * Here is just an example
+   * You can also judge the status by HTTP Status Code
+   */
+  response => {
+    const res = response.data
+
+    // if the custom code is not 20000, it is judged as an error.
+    if (res.code !== 0 && res.code !== 1) {
+      ElMessage({
+        message: res.msg || 'Error',
+        type: 'error',
+        duration: 5 * 1000
+      })
+
+      // 50008: Illegal token; 50012: Other clients logged in; 50014: Token expired;
+      if (res.code === 50008 || res.code === 50012 || res.code === 50014) {
+        // to re-login
+        const t = i18n.global.t
+        ElMessageBox.confirm(t('message.relogin_text'), t('message.logout'), {
+          confirmButtonText: t('message.relogin'),
+          cancelButtonText: t('message.cancel'),
+          type: 'warning'
+        }).then(() => {
+          setToken('')
+          location.reload()
+        })
+      }
+      return Promise.reject(new Error(res.msg || 'Error'))
+    } else if (res.code == 0) {
+      setToken(response.headers['authorization'])
+      return res
+    } else {
+      return res
+    }
+  },
+  error => {
+    console.log('err' + error) // for debug
+    ElMessage({
+      message: error.message,
+      type: 'error',
+      duration: 5 * 1000
+    })
+    return Promise.reject(error)
+  }
+)
+
+export default service
+\end{lstlisting}
+\texttt{axios}封装完成了登录过期校验，自动重定向等功能。\texttt{Token}损坏或过期时会弹出如下窗口提醒用户重新登录。
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.4]{figure/16.png}
+    \caption{注销提示}
+    \label{Fig.1.16}
+\end{figure}
+\subsubsection{\texttt{Portal}}
+\begin{lstlisting}
+import Chatbox from "@/components/Chatbox.vue";
+import { fetchOptions, fetchDetail } from "@/api/portal";
+import { onBeforeMount, ref } from "vue";
+import { openToast } from "toast-ts";
+import { useI18n } from 'vue-i18n'
+import { useStore } from '@/store'
+import { setToken } from '@/utils/auth';
+
+export default {
+  name: "Portal",
+  components: {
+    Chatbox,
+  },
+  setup() {
+    const stage = ref(0);
+    const loading = ref(false);
+    const schema = ref("");
+    const boxStyle = ref({
+    })
+    const options: Array<{ schema: string; title: string }> = [];
+    const am = ref("AM");
+    const pm = ref("PM");
+    const name = ref("bot1");
+    const title = ref("service");
+    const store = useStore()
+    const username = store.$state.name
+    
+
+    const { t } = useI18n()
+
+    onBeforeMount(async () => {
+      loading.value = true;
+      const options_ = await fetchOptions();
+      options_.forEach((option) => {
+        options.push({
+          schema: option.schema,
+          title: option.title,
+        });
+      });
+      loading.value = false;
+    });
+
+    async function submit(): Promise<void> {
+      if (schema.value === "") {
+        openToast(t('message.sel_schema'));
+        return;
+      }
+      loading.value = true;
+
+      const detail = await fetchDetail({schema: schema.value})
+      name.value = detail.name
+      title.value = detail.title
+      am.value = detail.am
+      pm.value = detail.pm
+
+      stage.value = 1
+      loading.value = false
+    }
+
+    function logout() {
+      setToken('')
+      location.reload()
+    }
+
+    return {
+      stage,
+      loading,
+      schema,
+      options,
+      boxStyle,
+      name,
+      title,
+      am,
+      pm,
+      username,
+      submit,
+      logout
+    };
+  },
+};
+\end{lstlisting}
+\subsubsection{\texttt{Chatbox}}
+\begin{lstlisting}
+// 初始化函数
+async mounted() {
+  let fail = false;
+  let resp;
+  try {
+    resp = await fetchInit({ schema: this.schema });
+    if (resp.code != 0) {
+      fail = true;
+    }
+  } catch (error) {
+    console.error(error);
+    fail = true;
+  }
+
+  if (resp === undefined) {
+    openToast(this.t('message.error'));
+    return;
+  }
+
+  if (fail) {
+    this.disabled = true;
+    this.message = this.t('message.service_err');
+    return;
+  }
+
+  let msgList = resp.data;
+
+  msgList.forEach((msg) => {
+    this.loadMsg(true, msg.content, msg.time);
+  });
+}
+
+// 加载并回显消息
+async loadMsg(bot: boolean, msg: string, time: number) {
+  this.history.push({
+    msg_id: this.maxMsgId++,
+    bot: bot,
+    content: msg,
+    time: time,
+  });
+  await this.$nextTick();
+  let historyContent = this.$refs.historyContent as any;
+  let historyScrollbar = this.$refs.historyScrollbar as any;
+  historyScrollbar.setScrollTop(historyContent.clientHeight);
+}
+
+// 发消息函数
+async send() {
+  let msg: string = this.message;
+  if (msg.length == 0) {
+    return;
+  }
+  let time: number = new Date().getTime();
+  this.message = "";
+  this.loadMsg(false, msg, time);
+
+  try {
+    let resp = await fetchMessage({
+      content: msg,
+    });
+
+    if (resp.code == 2) {
+      msg = this.t('message.expire');
+      time = new Date().getTime();
+      this.loadMsg(true, msg, time);
+    } else if (resp.code != 0) {
+      msg = this.error;
+      time = new Date().getTime();
+      this.loadMsg(true, msg, time);
+    } else {
+      let data = resp.data;
+      data.forEach((elem) => {
+        this.loadMsg(true, elem.content, elem.time);
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    msg = this.error;
+    time = new Date().getTime();
+    this.loadMsg(true, msg, time);
+  }
+}
+\end{lstlisting}
+\section{接口文档}
+\subsection{网络接口}
+样例来自\href{https://chatbot.lab.jnn.icu/}{样例机器人}
+\subsubsection{\texttt{Sign}接口}
+\paragraph{/auth/sign} \texttt{POST}\\
+功能：登录/注册。
+请求体：
+\begin{lstlisting}
+{
+    "username": "kino",
+    "pwd": "<md5 hash string>"
+}
+\end{lstlisting}
+响应头：
+\begin{lstlisting}
+...
+authorization: eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpZCI6MSwibmFtZSI6Imtpbm8iLCJleHAiOjE2Mzk1OTI1NTMsImRldGFpbCI6bnVsbH0.zYoOaElK4wKbKiADwUkXfabzRc0oi1YIb6-ADtUxqSnEe1wpaUCs2J2cwc9b0cSl-wey0B5a0fthD04qIq4Upq88IlcJhLdWQbcXURTeFM5t2g66ux6KtbL-qpo6nEt7PZfVkwTrw3ukCquO5Ch2n1jj-mnAkaONrGugq5QI6k612glcn_RZ9Tc8gg8ztpacMHJyLofYq5VuOXkXfENKAbRYsF22oz-4ZS5qgk8o_8TK2-eXWyLKVrVDeihZMpBIjJepTKDv83gKrtaWcJjWWQlze5OirWDLXUF1FJsDWqFQ-5a2fJF_AyGxjfCP0ltHw3of99H6je5No33YCPlnzw
+...
+\end{lstlisting}
+响应体：
+\begin{lstlisting}
+{
+    "code": 0,
+    "msg": "success",
+    "data": null
+}
+\end{lstlisting}
+\subsubsection{\texttt{Portal}接口}
+\paragraph{/portal/option} \texttt{GET}\\
+功能：列出可选择的方案。\\
+请求体：无\\
+响应体：
+\lstset{
+    language={[latex]TeX}
+}
+\begin{lstlisting}
+{
+    "code": 0,
+    "msg": "success",
+    "data": [
+        {
+            "schema": "0",
+            "title": "淘宝电商"
+        },
+        {
+            "schema": "1",
+            "title": "钱庄业务"
+        },
+        {
+            "schema": "2",
+            "title": "Bank Customer Service"
+        }
+    ]
+}
+\end{lstlisting}
+\paragraph{/portal/detail} \texttt{POST}\\
+功能：获取指定方案的设定。\\
+请求体：
+\begin{lstlisting}
+{
+    "schema": "0"
+}
+\end{lstlisting}
+响应体：
+\begin{lstlisting}
+{
+    "code": 0,
+    "msg": "success",
+    "data": {
+        "name": "电子客服",
+        "title": "淘宝电商",
+        "welcome": "以下是本店可以提供的服务",
+        "subservice": "子服务：",
+        "option": "服务选项：",
+        "am": "上午",
+        "pm": "下午",
+        "cancel": "取消",
+        "cancel_info": "输入“取消”可以取消操作～",
+        "cancel_success": "取消成功～",
+        "back": "返回",
+        "back_info": "输入“返回”可以返回上一级服务～",
+        "back_success": "返回成功～",
+        "other": "如果有其它问题也可以直接和我讲~",
+        "unknown": "抱歉！未能理解。",
+        "error": "未知错误"
+    }
+}
+\end{lstlisting}
+\subsubsection{\texttt{Chat}接口}
+\paragraph{/chat/init} \texttt{POST}\\
+功能：初始化一个会话，设置\texttt{cookie}保存\texttt{schema}与\texttt{status}。\\
+请求体：
+\begin{lstlisting}
+{
+    "schema": "0"
+}
+\end{lstlisting}
+响应头：\\
+设置经过签名的\texttt{cookie}。
+\begin{lstlisting}
+...
+Set-Cookie: sessionid=eyJzY2hlbWEiOiIwIiwic3RhdHVzIjowfQ:1mwjoH:yLLKGZaCeffWGsT-Mq1C3xTB8hcJp2jHsCCjdDaIeHk; expires=Mon, 13 Dec 2021 13:48:01 GMT; HttpOnly; Max-Age=7200; Path=/; SameSite=Lax
+...
+\end{lstlisting}
+响应体：
+\begin{lstlisting}
+{
+    "code": 0,
+    "msg": "success",
+    "data": [
+        {
+            "content": "以下是本店可以提供的服务\n子服务：\n商品业务\n如果有其它问题也可以直接和我讲~\n输入“返回”可以返回上一级服务～",
+            "time": 1639396081236
+        }
+    ]
+}
+\end{lstlisting}
+\paragraph{/chat/message} \texttt{POST}\\
+功能：处理一条消息，更新\texttt{cookie}保存新的\texttt{status}。\\
+请求体：
+\begin{lstlisting}
+{
+    "content": "商品业务"
+}
+\end{lstlisting}
+响应头：\\
+设置经过签名的\texttt{cookie}。
+\begin{lstlisting}
+...
+Set-Cookie: sessionid=eyJzY2hlbWEiOiIwIiwic3RhdHVzIjoxfQ:1mwk7n:Tp5h7Y-yinl6D7tuQMVxG5JnMDXg_T5OaD4CE1d37gE;
+...
+\end{lstlisting}
+响应体：
+\begin{lstlisting}
+{
+    "code": 0,
+    "msg": "success",
+    "data": [
+        {
+            "content": "以下是本店可以提供的服务\n服务选项：\n产品介绍\n使用方法\n查价格\n如果有其它问题也可以直接和我讲~",
+            "time": 1639397291725
+        }
+    ]
+}
+\end{lstlisting}
+\section{构建与部署}
+\subsection{单元测试}
+本系统的后端拥有完善的单元测试，使用\texttt{Django}提供的反射策略执行单元测试。
+\texttt{Django}提供了一键执行所有单元测试的功能，\texttt{Django}会在已安装的\texttt{Application}中搜寻实现了\texttt{unittest}基类的类，并执行其中以\texttt{test}开头的方法。
+\par 此处展示用于测试解析器的\texttt{test\_parser}模块。
+\lstset{
+    language=python
+}
+\begin{lstlisting}
+import logging
+import unittest
+
+import bot_service.service.model.parser as parser
+
+from bot_service.service.model.bot import CommandEnum
+
+
+class TestParser(unittest.TestCase):
+    class __Capture:
+        def __init__(self) -> None:
+            self.__buffer = []
+        
+        def write(self, s: str) -> None:
+            self.__buffer.append(s)
+        
+        def getline(self) -> str:
+            return self.__buffer.pop(0)
+        
+        def getall(self) -> list[str]:
+            buffer = self.__buffer
+            self.__buffer = []
+            return buffer
+
+    def test_complicated(self) -> None:
+        logger = logging.getLogger()
+        logger.disabled = True
+        with open('tests/testcase/complicated.def', 'r', encoding='utf8') as f:
+            script = parser.load_script(f)
+            
+            assert script is not None
+            assert script[0][0][0] == CommandEnum.Setting
+
+            settings = script[0][1]
+            assert len(settings) == 13
+            assert settings[0] == ((CommandEnum.KVItem, 'name', 'name'), None)
+            assert settings[12] == ((CommandEnum.KVItem, 'unkown', 'unkown'), None)
+            
+            assert script[1][0] == (CommandEnum.Service, 'service1')
+            
+            services = script[1][1]
+            assert len(services) == 6
+            assert services[0] == ((CommandEnum.Text, 'text test1', 'text1'), None)
+            assert services[1] == ((CommandEnum.Script, 'script test1', 'script1'), None)
+
+            assert services[4][0] == (CommandEnum.FAQ, 'faq1')
+            
+            faq = services[4][1]
+            assert len(faq) == 8
+            assert faq[0] == ((CommandEnum.KVItem, 'faq test1', 'answer1'), None)
+            assert faq[7] == ((CommandEnum.KVItem, 'faq test8', 'answer8'), None)
+
+            assert script[2][0] == (CommandEnum.Service, 'service2')
+            
+            services = script[2][1]
+            assert len(services) == 6
+            assert services[0] == ((CommandEnum.Text, 'text test4', 'test4'), None)
+            assert services[2] == ((CommandEnum.Text, 'text test6', 'test6'), None)
+            assert services[4] == ((CommandEnum.ScriptWaiting, 'script test2', 'holder', 'script2'), None)
+            assert services[5] == ((CommandEnum.Script, 'script test3', 'script3'), None)
+            
+            assert services[3][0] == (CommandEnum.Service, 'service3')
+            
+            services = services[3][1]
+            assert len(services) == 2
+            assert services[0] == ((CommandEnum.Text, 'text test7', 'test7'), None)
+
+            assert services[1][0] == (CommandEnum.FAQ, 'faq2')
+            
+            faq = services[1][1]
+            assert len(faq) == 3
+            assert faq[0] == ((CommandEnum.KVItem, 'faq test9', 'answer9'), None)
+            assert faq[2] == ((CommandEnum.KVItem, 'faq test11', 'answer11'), None)
+        
+    def test_empty(self) -> None:
+        logger = logging.getLogger()
+        logger.disabled = True
+        with open('tests/testcase/empty.def', 'r', encoding='utf8') as f:
+            script = parser.load_script(f)
+
+            assert script is not None
+            assert isinstance(script, list)
+            assert len(script) == 0
+    
+    def test_incorrect(self) -> None:
+        logger = logging.getLogger()
+        logger.handlers.clear()  # remove all the handlers
+        logger.filters.clear()  # remove all the filters
+        logger.propagate = False  # do not pass msg to the father logger
+        # add a handler for test
+        handler = logging.StreamHandler()
+        capture = TestParser.__Capture()
+        handler.setStream(capture)
+        logger.addHandler(handler)
+        logger.disabled = False  # enable logger
+        with open('tests/testcase/incorrect.def', 'r', encoding='utf8') as f:
+            parser.load_script(f)
+            output = [s.strip() for s in capture.getall()]
+            assert 'bad indentation at line 8.' in output
+            assert 'sub-command not allowed at line 1.' in output
+            assert 'syntax error at line 3.' in output
+            assert 'sub-command not allowed at line 3.' in output
+            assert 'no sub definition allowed under command at line 12.' in output
+    
+    def test_naughty_indent(self):
+        logger = logging.getLogger()
+        logger.disabled = True
+        with open('tests/testcase/naughty_indent.def', 'r', encoding='utf8') as f:
+            script = parser.load_script(f)
+            
+            assert script is not None
+            
+            assert script[0][0] == (CommandEnum.Service, 'service1')
+            assert script[1][0] == (CommandEnum.Service, 'service2')
+            
+            services = script[0][1]
+            assert len(services) == 3
+            assert services[0] == ((CommandEnum.Text, 'text test1', 'text1'), None)
+            assert services[1] == ((CommandEnum.Script, 'script test1', 'script1'), None)
+            assert services[2][0] == (CommandEnum.FAQ, 'faq1')
+            
+            faq = services[2][1]
+            assert len(faq) == 3
+            assert faq[0] == ((CommandEnum.KVItem, 'faq test1', 'answer1'), None)
+            assert faq[2] == ((CommandEnum.KVItem, 'faq test3', 'answer3'), None)
+            
+            services = script[1][1]
+            assert len(services) == 2
+            assert services[0] == ((CommandEnum.Text, 'text test4', 'text4'), None)
+            assert services[1] == ((CommandEnum.Script, 'script test2', 'script2'), None)
+
+    def test_recursive(self):
+        logger = logging.getLogger()
+        logger.disabled = True
+        with open('tests/testcase/recursive.def', 'r', encoding='utf8') as f:
+            script = parser.load_script(f)
+            
+            assert script is not None
+            
+            assert script[0][0] == (CommandEnum.Service, '1')
+            
+            services = script[0][1]
+            assert len(services) == 1
+            assert services[0][0] == (CommandEnum.Service, '2')
+            
+            services = services[0][1]
+            assert len(services) == 1
+            assert services[0][0] == (CommandEnum.Service, '3')
+
+            services = services[0][1]
+            assert len(services) == 1
+            assert services[0][0] == (CommandEnum.Service, '4')
+
+            services = services[0][1]
+            assert len(services) == 1
+            assert services[0][0] == (CommandEnum.Service, '5')
+
+\end{lstlisting}
+该模块会进行五个用例测试，进行{\bf 复杂脚本解析}测试、{\bf 空脚本解析}测试、{\bf 错误脚本解析}测试、{\bf 任意缩进脚本解析}测试与{\bf 递归脚本解析}测试。
+\par 测试的方法是读取脚本，然后使用\texttt{parser}进行解析，解析完成后得到脚本对象，取出一些位置的脚本进行断言，如果全部通过，则测试成功。
+\par 错误脚本解析测试需要读取解析过程中的输出内容，而输出内容是使用日志模块打印在控制台的。所以这里将日志重定向到\texttt{Capture}对象，并且去除日志的所有格式与附加信息，然后在日志上进行断言，确保能够识别出文件内的全部错误。
+\par 下方展示两个测试用例的内容，依次是灵活缩进脚本与错误脚本：
+\begin{lstlisting}
+service "service1"
+ text "text test1" "text1"
+ script "script test1" "script1"
+ faq "faq1"
+              "faq test1": "answer1"
+              "faq test2": "answer2"
+              "faq test3": "answer3"
+
+service "service2"
+                            text "text test4" "text4"
+                            script "script test2" "script2"
+
+\end{lstlisting}
+错误脚本：
+\begin{lstlisting}
+faq "root_faq"
+service "理财"
+    text "产品介绍" a "A产品：中风险...; B产品：低风险; C产品：高风险"
+    script "理财产品推荐评估" "evaluate"
+    faq "常见问题"
+        "我适合什么样的理财产品？": "选择理财产品需要根据自己对风险的承受能力，可以问我“理财产品推荐评估”进行评估。"
+        "七日年化利率与年利率有什么区别？": "七日年化利率是通过过去七日的收益情况估计的年利率，未来具有不确定性；而年利率是固定的，没有不确定性。"
+       "如何使用定期投资功能？": "前往首页，在金融功能栏下可以看到定期投资功能。"
+
+service "基础金融业务"
+  text "产品介绍" "手机银行APP可以使用转账、查询、账户管理、新卡申请、新卡激活、银行卡管理等功能"
+    script "附近网点查询" "querybranch"
+
+\end{lstlisting}
+\par 执行测试，只需要在项目根目录下执行\texttt{python manage.py test}即可。测试成功时的结果如下：
+\lstset{
+    language={[latex]TeX}
+}
+\begin{lstlisting}
+System check identified no issues (0 silenced).
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.018s
+
+OK
+\end{lstlisting}
+测试失败（这里将复杂脚本用例修改为错误的，导致第一个测试失败）时会输出如下结果：
+\begin{lstlisting}
+System check identified no issues (0 silenced).
+F....
+======================================================================
+FAIL: test_complicated (tests.test_parser.TestParser)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kino/Documents/homework/program_designing/lab.dsl-chatbot/bank_service/tests/test_parser.py", line 31, in test_complicated
+    assert script is not None
+AssertionError
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.019s
+
+FAILED (failures=1)
+\end{lstlisting}
+\subsection{容器化部署}
+本系统的后端使用\texttt{Docker}在生产环境部署，下方是构建使用的\texttt{Dockerfile}文件内容：
+\lstset{
+    language=sh
+}
+\begin{lstlisting}
+FROM python:3.10.0-buster
+
+COPY requirements.txt /bank_service/
+WORKDIR /bank_service/
+RUN pip install -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple
+
+FROM python:3.10.0-alpine3.15
+
+COPY . /bank_service/
+WORKDIR /bank_service/
+
+COPY --from=0 /usr/local/lib/python3.10/site-packages/ \
+    /usr/local/lib/python3.10/site-packages/
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add gcc musl-dev python3-dev libffi-dev openssl-dev cargo && \
+    pip install cryptography -i https://mirrors.cloud.tencent.com/pypi/simple && \
+    apk del gcc musl-dev python3-dev libffi-dev openssl-dev cargo
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000", "--noreload"]
+\end{lstlisting}
+为了降低镜像体积，基础镜像使用预安装\texttt{Python3.10.0}的\texttt{alpine}轻量级\texttt{Linux}系统，因为后端使用了一些二进制包，需要在构建时编译，镜像系统中需要存在\texttt{gcc}等构建工具。
+为此，使用了\texttt{Docker}提供的多阶段构建策略。首先使用\texttt{python:3.10.0-buster}全量镜像执行\texttt{pip install}安装依赖。构建完成后，将镜像更换为\texttt{python:3.10.0-alpine3.15}轻量镜像，然后将前一阶段构建得到的\texttt{site-packages}转移到新镜像的对应位置。
+\par 通过多阶段构建，最终镜像的大小控制在\texttt{110MB}左右。
+\section{自动化}
+\subsection{CI/CD}
+工程使用\texttt{Github Actions}提供的\texttt{Workflow}实现了一个基础CI，服务器上使用bash脚本编写了一个拉取更新并构建镜像的简易CD，提高了开发效率。
+\par 下方是CD脚本：
+\lstset{
+    language=sh
+}
+\begin{lstlisting}
+spawn git pull
+except "Username" { send "PopChicken\n" }
+expect "Password" { send "ghp_secret_key\n" }
+
+docker rm bank_service --force
+docker image rm bankservice
+docker build -t bankservice:latest .
+\end{lstlisting}
+\end{document}

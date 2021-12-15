@@ -33,7 +33,7 @@ export default {
         return
       }
 
-      let pwdhash = Md5.hashStr(pwd.value)
+      let pwdhash = Md5.hashStr(pwd.value + 'salt-9aSO(UIf89!(*@&12')
       let resp = await Sign({username: username.value, pwd: pwdhash})
       if (resp.code == 0) {
         store.$state.name = username.value

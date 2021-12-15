@@ -5,4 +5,3 @@ llist==0.7.1
 PyJWT==2.3.0
 pyparsing==3.0.6
 django-cors-headers==3.10.1
-cryptography==36.0.1

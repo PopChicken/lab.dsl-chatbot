@@ -17,6 +17,7 @@ urlpatterns = [
 """
 import bot_service.service.data.portal as data
 import bot_service.service.util.validate as validator
+import serv_auth.auth as auth
 
 from bot_service.service.util.resp import fail, success, expire
 
@@ -33,6 +34,7 @@ detail_schema = {
 }
 
 
+@auth.preprocessToken
 def option(request: HttpRequest) -> JsonResponse:
     """portal option api
 
@@ -49,6 +51,7 @@ def option(request: HttpRequest) -> JsonResponse:
     return JsonResponse(success(resp))
 
 
+@auth.preprocessToken
 def detail(request: HttpRequest) -> JsonResponse:
     """portal detail api
 

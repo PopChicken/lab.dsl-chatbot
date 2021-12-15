@@ -208,7 +208,7 @@ class BotModel:
             'cancel_info': "You can cancel your operation by sending 'Cancel'",
             'cancel_success': "Canceled successfully~",
             'back': "Return",
-            'back_info': "You can return to previous service by sending 'Return'.",
+            'back_info': "In sub-service, you can return to previous service by sending 'Return'.",
             'back_success': "Returned successfully~",
             'other': "If you have any other question, you can ask me directly.",
             'unknown': "Sorry, I've not understood.",

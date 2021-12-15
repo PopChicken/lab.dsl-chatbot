@@ -18,6 +18,7 @@ urlpatterns = [
 """
 import bot_service.service.data.session as data
 import bot_service.service.util.validate as validator
+import serv_auth.auth as auth
 
 from bot_service.service.util.resp import fail, success, expire
 
@@ -44,6 +45,7 @@ message_schema = {
 }
 
 
+@auth.preprocessToken
 def init(request: HttpRequest) -> JsonResponse:
     """session initialization api
 
@@ -64,6 +66,7 @@ def init(request: HttpRequest) -> JsonResponse:
     return JsonResponse(success(resp))
 
 
+@auth.preprocessToken
 def message(request: HttpRequest) -> JsonResponse:
     """message handling api
 

@@ -13,8 +13,6 @@ except Exception as e:
 return JsonResponse(success(resp))
 
 """
-import time
-
 import bot_service.service.model.loader as loader
 
 from django.contrib.sessions.backends.base import SessionBase

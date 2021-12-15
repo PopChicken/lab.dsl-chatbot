@@ -45,7 +45,7 @@ SUCCESS = True
 
 
 def validate(http_req: HttpRequest, schema: object) -> Tuple[bool, dict]:
-    """[summary]
+    """validate a request with a schema
 
     Args:
         http_req (HttpRequest): an user http request

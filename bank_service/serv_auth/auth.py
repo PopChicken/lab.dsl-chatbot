@@ -99,7 +99,7 @@ sign_schema = {
     'type': 'object',
     'required': ['username', 'pwd'],
     'properties': {
-        'username': {'type': 'string', 'minLength': 4, 'maxLength': 32},
+        'username': {'type': 'string', 'minLength': 4, 'maxLength': 32, 'pattern': r'[a-z0-9A-Z_]+'},
         'pwd': {'type': 'string', 'length': 32}
     }
 }

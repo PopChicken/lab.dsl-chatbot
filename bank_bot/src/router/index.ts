@@ -25,7 +25,10 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const token = getToken()
+  let token = getToken()
+  if (token === undefined) {
+    token = ''
+  }
   if (token.length > 0 && to.name == 'Sign') {
     next({
       name: 'Portal'

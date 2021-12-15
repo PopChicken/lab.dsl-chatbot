@@ -36,7 +36,7 @@ const i18n = createI18n({
 				service_err: '连接服务器失败，请刷新重试',
 				expire: '会话过期，请确保允许cookie，并刷新页面。',
 				error: '网络异常',
-        logout: '确认注销',
+        logout: '注销',
         relogin: '重新登录',
         relogin_text: '您的登陆凭据已过期，请重新登陆，或者点击取消留在本页面',
         cancel: '取消',

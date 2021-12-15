@@ -25,7 +25,7 @@ export default {
       if (username.value.length < 4 || username.value.length > 32) {
         openToast(t('message.usrtext'))
         return
-      } else if (/[a-z0-9A-Z_]+/.test(username.value) === false) {
+      } else if (/^[a-z0-9A-Z_]+$/.test(username.value) === false) {
         openToast(t('message.illegal_usrn'))
         return
       } else if (pwd.value.length < 8) {

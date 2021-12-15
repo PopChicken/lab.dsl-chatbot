@@ -6,8 +6,9 @@ import App from './App.vue'
 import VueCookies from 'vue-cookies'
 import { createPinia } from 'pinia'
 import i18n from './languages'
+import router from './router'
 
-const app = createApp(App)
+const app = createApp(App).use(router)
 
 app.config.globalProperties.$cookies = VueCookies;
 

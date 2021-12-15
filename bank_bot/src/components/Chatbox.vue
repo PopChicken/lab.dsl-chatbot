@@ -11,6 +11,9 @@
         <span class="title">{{ this.name }}</span>
         <span class="subtitle">{{ this.title }}</span>
       </div>
+      <div class="control">
+        <span class="back" @click="goback">{{ $t('message.back') }}</span>
+      </div>
     </div>
     <div class="main">
       <el-scrollbar ref="historyScrollbar" class="chat">
@@ -70,7 +73,6 @@
         @click="send()"
         :disabled="disabled"
         class="send-btn"
-        type="primary"
         circle
         >發</el-button
       >
@@ -105,7 +107,7 @@ export default defineComponent({
     am: { type: String, default: "" },
     pm: { type: String, default: "" },
     error: { type: String, default: "" },
-    schema: { type: String, default: "" },
+    schema: { type: String, default: "" }
   },
   async mounted() {
     let fail = false;
@@ -160,6 +162,10 @@ export default defineComponent({
       return (
         this.zero(h) + ":" + this.zero(m) + " " + (h >= 12 ? this.pm : this.am)
       );
+    },
+    goback() {
+      const parent = this.$parent as any
+      parent.stage = 0
     },
     async send() {
       let msg: string = this.message;
@@ -231,6 +237,16 @@ export default defineComponent({
     .subtitle {
       font-size: 14px;
       color: #8f8f8f;
+    }
+  }
+
+  .control {
+    flex: 1;
+    text-align: right;
+    margin-left: auto;
+
+    .back {
+      cursor: pointer;
     }
   }
 }

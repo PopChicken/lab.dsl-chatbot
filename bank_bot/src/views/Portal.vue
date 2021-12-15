@@ -5,6 +5,11 @@
         <div class="name">
           <span class="title">{{ $t('message.cp') }}</span>
         </div>
+        <div class="control">
+          <span>{{ $t('message.hello') }} {{ username }}</span>
+          <el-divider direction="vertical" content-position="center" />
+          <span class="logout" @click="logout">{{ $t('message.logout') }}</span>
+        </div>
       </div>
       <div class="option">
         <el-select v-model="schema" :placeholder="$t('message.sel_schema')">
@@ -15,7 +20,7 @@
             :value="item.schema"
           />
         </el-select>
-        <el-button @click="submit" type="primary">{{ $t('message.confirm') }}</el-button>
+        <el-button @click="submit" style="margin-left: 6px">{{ $t('message.confirm') }}</el-button>
       </div>
     </div>
     <chatbox v-if="stage == 1" :schema="schema" :name="name" :title="title" :am="am" :pm="pm" />
@@ -28,6 +33,8 @@ import { fetchOptions, fetchDetail } from "@/api/portal";
 import { onBeforeMount, ref } from "vue";
 import { openToast } from "toast-ts";
 import { useI18n } from 'vue-i18n'
+import { useStore } from '@/store'
+import { setToken } from '@/utils/auth';
 
 export default {
   name: "Portal",
@@ -35,16 +42,20 @@ export default {
     Chatbox,
   },
   setup() {
-    let stage = ref(0);
-    let loading = ref(false);
-    let schema = ref("");
-    let boxStyle = ref({
+    const stage = ref(0);
+    const loading = ref(false);
+    const schema = ref("");
+    const boxStyle = ref({
     })
-    let options: Array<{ schema: string; title: string }> = [];
-    let am = ref("AM");
-    let pm = ref("PM");
-    let name = ref("bot1");
-    let title = ref("service");
+    const options: Array<{ schema: string; title: string }> = [];
+    const am = ref("AM");
+    const pm = ref("PM");
+    const name = ref("bot1");
+    const title = ref("service");
+    const store = useStore()
+    const username = store.$state.name
+    
+
     const { t } = useI18n()
 
     onBeforeMount(async () => {
@@ -76,6 +87,11 @@ export default {
       loading.value = false
     }
 
+    function logout() {
+      setToken('')
+      location.reload()
+    }
+
     return {
       stage,
       loading,
@@ -86,7 +102,9 @@ export default {
       title,
       am,
       pm,
+      username,
       submit,
+      logout
     };
   },
 };
@@ -146,6 +164,21 @@ export default {
 
       span {
         text-align: left;
+      }
+    }
+
+    .control::before {
+      content: "";
+      flex: 1
+    }
+
+    .control {
+      flex: 2;
+      text-align: right;
+      margin-left: auto;
+
+      .logout {
+        cursor: pointer;
       }
     }
   }

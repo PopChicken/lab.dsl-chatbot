@@ -1,19 +1,24 @@
-.el-button--primary {
-  --el-button-background-color: #c04851;
-  --el-button-active-background-color: #ed5a65;
-  --el-button-hover-color: #f07c82;
+.el-button--default {
+  --el-button-bg-color: #c04851;
+  --el-button-active-bg-color: #ed5a65;
+  --el-button-hover-bg-color: #f07c82;
   --el-button-border-color: #c04851;
+  --el-button-hover-border-color: #eea2a4;
   --el-button-active-border-color: #c04851;
+  --el-button-active-text-color: white;
+  --el-button-hover-text-color: white;
+  --el-button-text-color: white;
 }
 
-.el-button--primary.is-disabled,
-.el-button--primary.is-disabled:active,
-.el-button--primary.is-disabled:focus,
-.el-button--primary.is-disabled:hover {
+.el-button--default.is-disabled,
+.el-button--default.is-disabled:active,
+.el-button--default.is-disabled:focus,
+.el-button--default.is-disabled:hover {
   background-color: #e3b4b8;
   border-color: #eea2a4;
 }
 
 .el-input {
   --el-input-focus-border: #eea2a4;
+  --el-select-input-focus-border-color: #eea2a4;
 }

@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
+import { useStorage } from '@vueuse/core'
 
 export const useStore = defineStore({
   id: 'setting',
   state: () =>({
-		lang: 'zh',
-		token: ''
+		lang: useStorage('lang', 'zh') as unknown as string,
+		token: useStorage('token', '') as unknown as string,
+    name: useStorage('name', 'user') as unknown as string
   }),
   getters: {},
   actions: {}

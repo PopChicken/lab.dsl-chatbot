@@ -2,3 +2,7 @@
 *.aux
 *.out
 *.gz
+
+*.drawio
+*.synctex(busy)
+*.toc
